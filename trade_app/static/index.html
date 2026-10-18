@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="th">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Trade Sam Where · Trading Workspace</title><link rel="stylesheet" href="/static/style.css"></head>
+<body>
+<aside class="sidebar">
+  <a class="brand" href="/" aria-label="Trade Sam Where home"><span class="brand-mark">TSW</span><div>Trade Sam Where<small>TRADING WORKSPACE</small></div></a>
+  <div class="nav-label">WORKSPACE</div>
+  <nav aria-label="เมนูหลัก">
+    <button class="nav active" data-page="dashboard"><span>◫</span> Overview</button>
+    <button class="nav" data-page="terminal"><span>⌁</span> Trading Terminal</button>
+    <button class="nav" data-page="journal"><span>▤</span> Trading Journal</button>
+    <button class="nav" data-page="analytics"><span>✧</span> AI & Analytics</button>
+    <button class="nav" data-page="risk"><span>◇</span> Risk Management</button>
+  </nav>
+  <div class="sidebar-bottom"><div class="account-label">ACCOUNT MODE</div><b id="modeLabel">กำลังโหลด…</b><p>เวลาแสดงผล Asia/Bangkok<br>สแกนสัญญาณทุก 3 วินาที</p><div class="mini-status"><i id="statusDot"></i><span id="connection">Connecting</span></div></div>
+</aside>
+<main>
+  <header><div class="breadcrumb">Workspace <span>/</span> <b id="crumb">Overview</b></div><div class="header-right"><span id="clock"></span><button id="monitorQuick" class="text-button">Auto: OFF</button><button id="killTop" class="danger-outline">⏹ Kill Switch</button></div></header>
+  <div class="content">
+    <div class="page-heading"><div><div class="eyebrow">YOUR EDGE, IN ONE PLACE</div><h1 id="title">ภาพรวมพอร์ต</h1><p id="subtitle">ติดตามบัญชี ผลการเทรด และความเสี่ยงแบบเรียลไทม์</p></div><div id="accountBadge" class="badge">รอข้อมูลบัญชี</div></div>
+    <div id="notice" role="status" class="notice"></div>
+    <div id="errorBanner" class="error-banner" hidden></div>
+    <section id="dashboard" class="page active">
+      <div id="accountCards" class="cards"></div>
+      <div class="grid-two"><article class="panel"><div class="panel-head"><div><h2>Portfolio performance</h2><p id="curveDescription">กำไรสุทธิสะสมจาก Position ที่ปิดครบ</p></div><select id="curveMode" class="chart-select" aria-label="เลือกกราฟพอร์ต"><option value="pnl">Cumulative P&L</option><option value="equity">Live Equity</option></select></div><canvas id="equityChart" aria-label="กราฟผลการเทรดหรือ Equity"></canvas><div id="equityCaption" class="caption"></div></article>
+      <article class="panel"><div class="panel-head"><h2>เป้าหมายวันนี้</h2><span class="badge">DAILY GOAL</span></div><div id="goal"></div><div class="divider"></div><div id="riskBrief"></div><button class="text-button jump" data-page="risk">จัดการความเสี่ยง ↗</button></article></div>
+      <div id="metricCards" class="cards compact"></div>
+      <div class="grid-two"><article class="panel"><div class="panel-head"><div><h2>Daily P&L</h2><p>กำไรสุทธิ รวม Commission, Swap และ Fee</p></div></div><canvas id="dailyChart" aria-label="กำไรรายวัน"></canvas></article><article class="panel"><div class="panel-head"><h2>Strategy watchlist</h2><button class="text-button jump" data-page="analytics">ดูทั้งหมด ↗</button></div><div id="watchlist"></div></article></div>
+    </section>
+    <section id="terminal" class="page">
+      <article class="panel monitor-panel"><div class="panel-head"><div><h2>Auto Monitor · Demo</h2><p>กลยุทธ์จาก Risk Management · Market order · Auto Lot · เพดานจำนวนไม้ตาม Risk Management</p></div><span id="monitorBadge" class="badge muted">OFF</span></div>
+        <div class="monitor-actions"><label>ระยะเวลา Session<select id="monitorHours"><option value="1">1 ชั่วโมง</option><option value="4">4 ชั่วโมง</option><option value="8" selected>8 ชั่วโมง</option><option value="24">24 ชั่วโมง</option></select></label><button id="monitorStart" type="button" class="button primary">เริ่มส่งอัตโนมัติ Demo</button><button id="monitorStop" type="button" class="button secondary" disabled>หยุด Auto</button></div>
+        <label class="expiry-option"><input id="monitorCloseExpiry" type="checkbox" checked>ครบเวลาให้ปิด Position และ Pending ของแอป</label>
+        <p id="monitorMessage" class="caption">กำลังโหลดสถานะ Monitor</p><p id="monitorExpiry" class="caption"></p><p class="caption">เริ่มจากสัญญาณแท่งใหม่ · ตรวจ Risk ทุกไม้ · ปิด Position เองได้ · หลังปิดรอแท่งใหม่ · เปิดแอปและ MT5 ค้างไว้ · Restart แล้ว Auto เปิดไม้ใหม่จะปิด แต่กำหนดปิดเมื่อหมดเวลายังคงอยู่</p>
+        <h3 class="strategy-status-title">การประเมินแต่ละกลยุทธ์ · กลยุทธ์ละไม่เกิน 1 ไม้</h3><div id="strategyExecution" class="table-wrap"></div>
+        <details><summary>ประวัติการทำงาน Auto</summary><div id="monitorEvents" class="table-wrap"></div></details>
+      </article>
+      <div class="terminal-grid"><article class="panel chart-panel"><div class="panel-head"><div><h2 id="symbolTitle">XAUUSD <span class="badge muted">M15</span></h2><p id="quote"></p></div><span class="badge" id="spreadBadge"></span></div><canvas id="priceChart" aria-label="กราฟแท่งเทียน XAUUSD M15 พร้อมจุดเข้าออก"></canvas><div class="caption">▲ Buy / ▼ Sell · จุดเทรดจาก Journal · เส้น Entry, SL, TP จาก preview หรือสัญญาณที่เลือก</div><div id="chartHover" class="caption">เลื่อนเมาส์บนกราฟเพื่อดู OHLC</div></article>
+      <article class="panel order-panel"><div class="panel-head"><h2>New order</h2><span class="badge">DEMO</span></div><form id="orderForm">
+        <div class="segmented"><label><input type="radio" name="side" value="BUY" checked><span>BUY</span></label><label><input type="radio" name="side" value="SELL"><span>SELL</span></label></div>
+        <label>Order type<select name="kind"><option>MARKET</option><option>LIMIT</option><option>STOP</option></select></label>
+        <label id="entryField" hidden>Entry price<input name="entry" type="number" step="any" min="0"></label>
+        <div class="form-row"><label>Stop Loss<input name="sl" type="number" min="0" step="any" required></label><label>Take Profit<input name="tp" type="number" min="0" step="any" required></label></div>
+        <div class="level-tools"><button type="button" id="suggestLevels" class="button secondary full">✧ แนะนำ SL / TP จากราคาและแนวโน้ม</button><div class="level-actions"><button type="button" id="suggestSL" class="text-button">เติมเฉพาะ SL</button><button type="button" id="suggestTP" class="text-button">เติมเฉพาะ TP</button></div></div>
+        <div id="levelSuggestion" class="level-suggestion" role="status" hidden></div>
+        <div class="lot-control"><label for="lotInput">Lot <small>เลือกปุ่มเพิ่ม/ลด หรือใช้ Auto sizing จาก Risk</small></label><input id="lotInput" name="lot" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="Auto sizing">
+          <div class="lot-adjustments" role="group" aria-label="ปรับขนาด Lot">
+            <button type="button" class="lot-adjust" data-lot-delta="0.01">+0.01</button><button type="button" class="lot-adjust" data-lot-delta="0.1">+0.1</button><button type="button" class="lot-adjust" data-lot-delta="1">+1</button>
+            <button type="button" class="lot-adjust" data-lot-delta="-0.01">−0.01</button><button type="button" class="lot-adjust" data-lot-delta="-0.1">−0.1</button><button type="button" class="lot-adjust" data-lot-delta="-1">−1</button>
+          </div><button type="button" id="lotAuto" class="text-button">Auto sizing · คำนวณจาก Risk</button>
+        </div>
+        <label>Strategy<select name="strategy"><option value="manual">Manual</option><option value="smc">SMC Sweep + BOS</option><option value="supply">Supply / Demand</option><option value="ema">EMA Pullback</option><option value="bollinger">Bollinger Pullback</option><option value="asian">Asian Breakout</option><option value="ai">AI Playbook</option></select></label>
+        <button class="button secondary full" type="submit">คำนวณ Lot และตรวจความเสี่ยง</button>
+      </form><div id="preview" class="preview"><p>ใส่ SL และ TP เพื่อคำนวณแผนก่อนส่งคำสั่ง</p></div><button id="sendOrder" class="button primary full" disabled>ส่งคำสั่ง Demo</button><p class="caption">Risk เป็นค่าประมาณที่ SL ไม่รวม slippage และค่าธรรมเนียม</p></article></div>
+      <article class="panel"><div class="panel-head"><h2>Positions & Pending orders</h2><span id="exposureCount" class="badge muted"></span></div><div id="positions" class="table-wrap"></div></article>
+    </section>
+    <section id="journal" class="page">
+      <article class="panel"><div class="panel-head"><div><h2>ประวัติการเทรดอัตโนมัติ</h2><p>ข้อมูลระดับ Deal จาก MT5 · IN / OUT / INOUT · เวลาไทย</p></div><a id="exportCsv" class="button secondary" href="/api/journal.csv">↓ Export CSV</a></div>
+        <form id="filters" class="filters"><label>จากวันที่<input name="start" type="date"></label><label>ถึงวันที่<input name="end" type="date"></label><label>ตั้งแต่เวลา<input name="hour_start" type="time"></label><label>ถึงเวลา<input name="hour_end" type="time"></label><label>กลยุทธ์<select name="strategy" id="filterStrategy"><option value="">ทั้งหมด</option></select></label><label>แหล่งที่มา<select name="source"><option value="">ทั้งหมด</option><option>Manual</option><option>EA</option></select></label><button type="reset" class="text-button">ล้างตัวกรอง</button></form>
+        <div id="journalSummary" class="journal-summary"></div><div id="journalTable" class="table-wrap"></div><div class="pagination"><button id="prevPage" class="button secondary">← ก่อนหน้า</button><span id="pageInfo"></span><button id="nextPage" class="button secondary">ถัดไป →</button></div>
+      </article>
+    </section>
+    <section id="analytics" class="page">
+      <div class="section-heading"><div><h2>Signal scanner</h2><p>M15 สำหรับ 5 กลยุทธ์ · AI Playbook ใช้ H1 · สัญญาณเป็นแผนให้ตรวจและกดส่งเอง</p></div><span class="badge">CLOSED CANDLES</span></div><div id="signalCards" class="signal-grid"></div>
+      <article class="panel"><div class="panel-head"><div><h2>Strategy performance</h2><p>แยกไม้ที่เปิดอยู่และผลที่ปิดครบตาม Magic Number · จำนวนไม้ที่ปิดคือขนาดตัวอย่างสำหรับประเมินผล</p></div></div><div id="strategyTable" class="table-wrap"></div><p class="caption">Floating P&L ยังไม่ใช่ผลปิดการเทรด · ควรสะสมผลหลายไม้และหลายสภาวะตลาดก่อนสรุปประสิทธิภาพของกลยุทธ์</p></article>
+      <div class="grid-two"><article class="panel"><div class="panel-head"><h2>AI validation</h2><span class="badge muted">LOGISTIC REGRESSION</span></div><div id="modelStats"></div><p class="caption">ค่าจากโมเดลคือความน่าจะเป็นของทิศทางแท่งถัดไป ยังไม่ใช่โอกาสทำกำไร ผล validation ไม่รวมต้นทุนการเทรด</p></article><article class="panel"><div class="panel-head"><h2>ความเสี่ยงและความสม่ำเสมอ</h2></div><div id="consistency"></div><p class="caption">Drawdown ของผลเทรดคำนวณจากกำไรสะสม ส่วน Equity Drawdown ใช้ตัวอย่างที่เก็บตั้งแต่เปิดแอป</p></article></div>
+    </section>
+    <section id="risk" class="page">
+      <div class="grid-two"><article class="panel"><div class="panel-head"><div><h2>Risk limits</h2><p>ใช้ตรวจทุกคำสั่งใหม่ ทั้ง Market และ Pending</p></div><span class="badge">ACCOUNT-WIDE</span></div>
+        <form id="settingsForm"><div class="form-row"><label>Lot สูงสุด<input name="max_lot" type="number" step="any" min="0.001" max="100" required></label><label>Risk ต่อไม้ (%)<input name="risk_percent" type="number" step="any" min="0.01" max="10" required></label></div>
+        <div class="form-row"><label>ขาดทุนสูงสุด / วัน<input name="daily_loss" type="number" step="any" min="0.01" required></label><label>Position + Pending สูงสุด<input name="max_orders" type="number" min="1" max="100" required></label></div>
+        <div class="form-row"><label>Spread สูงสุด (points)<input name="max_spread" type="number" step="any" min="0.01" required></label><label>เป้ากำไร / วัน<input name="daily_target" type="number" step="any" min="0.01" required></label></div>
+        <p class="caption">จำนวนออเดอร์นับทั้งบัญชี ขาดทุนรายวันใช้กำไรสุทธิวันนี้และ Floating Loss พร้อมสำรองความเสี่ยงถึง SL ของออเดอร์เดิม เวลารีเซ็ต 00:00 ไทย</p>
+        <div class="divider"></div><h3>Strategy settings</h3><div id="strategyToggles" class="toggles"></div>
+        <div class="form-row"><label>Reward : Risk<input name="reward_ratio" type="number" step="any" min="0.1" max="20" required></label><label>AI threshold<input name="playbook_threshold" type="number" step=".01" min=".6" max=".95" required></label></div>
+        <div class="form-row"><label>Asian Range เริ่ม (ชั่วโมงไทย)<input name="asian_start" type="number" min="0" max="22" required></label><label>Asian Range จบ (ชั่วโมงไทย)<input name="asian_end" type="number" min="1" max="23" required></label></div>
+        <label>ชื่อ EA ตาม Magic Number <small>หนึ่งรายการต่อบรรทัด: 12345=ชื่อ EA</small><textarea name="magic_names" rows="4" placeholder="12345=Gold Scalper"></textarea></label><button class="button primary full" type="submit">บันทึกการตั้งค่า</button></form>
+      </article><div><article class="panel kill-panel"><div class="panel-head"><h2>Emergency control</h2><span class="badge negative">KILL SWITCH</span></div><div class="kill-icon">⏹</div><h3 id="killTitle">ระบบพร้อมรับคำสั่ง</h3><p>เมื่อเปิด Kill Switch ระบบจะบล็อกคำสั่งใหม่และยกเลิก Pending ของกลยุทธ์ในแอปนี้ สถานะจะคงอยู่หลังเปิดแอปใหม่</p><p class="caption">Position ที่เปิดอยู่ยังคงมี SL/TP ทำงานใน MT5 การเทรดจาก EA ภายนอกและการเทรดผ่าน MT5 ต้องหยุดจาก MT5 เอง</p><button id="killMain" class="button danger full">เปิด Kill Switch</button></article>
+      <article class="panel"><div class="panel-head"><h2>Risk monitor</h2></div><div id="riskMonitor"></div></article></div></div>
+    </section>
+    <footer>TRADE SAM WHERE <span>Paper / MT5 Demo · Local workspace · <span id="lastUpdate">—</span></span></footer>
+  </div>
+</main>
+<dialog id="closeDialog"><h2>ปิด Position ที่ราคาตลาด</h2><p id="closeDetails"></p><p class="caption">กำไร/ขาดทุนที่ได้รับจริงอาจต่างจากที่แสดงตามราคาและค่าธรรมเนียม หลังปิดระบบ Auto จะรอสัญญาณจากแท่งใหม่</p><div class="close-dialog-actions"><button id="closeCancel" class="button secondary" type="button">ยกเลิก</button><button id="closeConfirm" class="button danger" type="button">ยืนยันปิด Position</button></div></dialog>
+<script src="/static/levels.js" defer></script>
+<script src="/static/app.js" defer></script>
+</body></html>

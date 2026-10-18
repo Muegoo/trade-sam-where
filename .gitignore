@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+signals.csv
+data/
+artifacts/
+.pytest_cache/
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+*.sqlite*
+*.log
+.DS_Store
+.browser-recordings/
+docs/images/*.csv

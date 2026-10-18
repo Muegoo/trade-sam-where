@@ -1,0 +1,133 @@
+# การใช้งาน Trading Workspace
+
+รองรับ **Demo, ส่งด้วยปุ่ม และ Auto Monitor ตามกลยุทธ์ที่เลือก** โหมด `simulation` ใช้บัญชี Paper และประวัติตัวอย่างที่ติดป้ายข้อมูลจำลอง สามารถลอง Market / Limit / Stop, Journal, Auto และ Kill Switch โดยไม่เชื่อม MT5
+
+## ฟีเจอร์
+
+| หน้า | ความสามารถ |
+|---|---|
+| Overview | Balance, Equity, Credit, Floating P&L, Win Rate, Profit Factor, Drawdown, กราฟกำไรสะสมหรือ Equity, Daily P&L และเป้ากำไรรายวัน |
+| Trading Terminal | กราฟแท่งเทียน M15 จาก MT5, จุดเข้าออกจาก Journal, จุดสัญญาณ, Market / Limit / Stop ทั้ง Buy และ Sell, คำนวณ Lot, Risk, SL, TP, R:R และ Margin, ดู Positions / Pending และยกเลิก Pending |
+| Trading Journal | ดึง Deals จาก MT5 อัตโนมัติ, แสดง Magic Number / ชื่อ EA / Manual, กรองวัน เวลาไทย กลยุทธ์ และแหล่งที่มา, แบ่งหน้า และส่งออก CSV ตามตัวกรอง |
+| AI & Analytics | สแกน 6 กลยุทธ์, แสดง Entry / SL / TP และเหตุผล, นำแผนไปตรวจใน Terminal, วิเคราะห์ผลรายกลยุทธ์, Expectancy, ความผันผวน P&L, Loss Streak และ Drawdown |
+| Risk Management | Lot สูงสุด, Risk ต่อไม้, ขาดทุนสูงสุดต่อวัน, จำนวน Positions + Pending ทั้งบัญชี, Spread สูงสุด, เป้ากำไร, เปิดปิดกลยุทธ์, R:R, AI threshold, ช่วง Asian Range, ตั้งชื่อ Magic และ Kill Switch |
+
+ข้อมูลอัปเดตทุก **3 วินาที** สัญญาณใช้แท่งที่ปิดแล้วและคำนวณใหม่เมื่อแท่งปิดหรือการตั้งค่าเปลี่ยน เมื่อ Auto ปิดอยู่ การสแกนไม่ส่งออเดอร์ การส่งด้วยปุ่มใช้ Preview อายุ 30 วินาที และตรวจ Risk อีกครั้งด้วยข้อมูลใหม่ก่อนส่ง
+
+## Auto Monitor และปิด Position ก่อนถึง TP
+
+เปิดจากหน้า Trading Terminal เลือกระยะเวลา Session 1–24 ชั่วโมง (เริ่มต้น 8 ชั่วโมง) แล้วกดเริ่ม Auto Monitor ระบบรันที่เซิร์ฟเวอร์ ไม่ต้องเปิดหน้าเว็บค้างไว้ แต่ต้องเปิดเซิร์ฟเวอร์และ MT5 ไว้ หาก restart เซิร์ฟเวอร์ Auto จะปิดและต้องเริ่มใหม่
+
+- ใช้กลยุทธ์ที่เปิดไว้ใน Risk Management ตามลำดับในหน้า AI & Analytics ส่ง Market order ด้วย Auto Lot ตาม Risk เดิมและ SL ของสัญญาณ TP คำนวณจาก Entry ปัจจุบันด้วย R:R ที่ตั้งไว้
+- เปิดเพิ่มได้ถึงเพดาน `max_orders` ใน Risk Management โดยนับ Position/Pending ทั้งบัญชี รวม Position ที่เปิดเองหรือจาก EA อื่น บัญชี Hedging แยกแต่ละไม้ได้ ส่วน Netting ยังรอ exposure ของ symbol เดิมปิดก่อน
+- เริ่มหรือเริ่มใหม่จากสัญญาณแท่งถัดไป ไม่ย้อนส่งสัญญาณเก่าที่แสดงอยู่ตอนเริ่ม
+- บัญชี Hedging ประเมินกลยุทธ์แยกกัน จึงรองรับ Buy/Sell ของคนละกลยุทธ์พร้อมกันได้ บัญชี Netting จะรอเมื่อกลยุทธ์ให้สัญญาณขัดกัน หากราคาห่างจาก Entry ของสัญญาณเกินครึ่งระยะ SL จะไม่ไล่ราคา ตรวจแท่งล่าสุด, tick, Risk, Spread, Margin, จำนวนออเดอร์, ขาดทุนรายวัน และ Broker order_check ก่อนส่ง
+- จำกัด **1 Position/Pending ต่อกลยุทธ์** เพื่อเก็บตัวอย่างจากหลายกลยุทธ์ภายในเพดานรวม 5 ไม้ หากหลายกลยุทธ์พร้อมกัน ให้กลยุทธ์ที่มีจำนวนตัวอย่างน้อยกว่าส่งก่อน เมื่อปิดกลยุทธ์หนึ่ง จะรอแท่งใหม่เฉพาะกลยุทธ์นั้น ไม่บล็อกกลยุทธ์อื่น
+- บันทึกสิทธิ์ส่งของแต่ละกลยุทธ์/แท่ง/บัญชีลง SQLite ก่อนเรียก Broker กลยุทธ์เดียวส่งได้ครั้งเดียวต่อแท่ง หลายกลยุทธ์ที่เห็นทิศทางเดียวกันส่งคนละไม้ได้ภายใต้เพดานจำนวนและ Risk รวม หากผลไม่แน่นอนจะหยุด Monitor และไม่ส่งซ้ำ ต้องตรวจใน MT5 ก่อนแก้สถานะคำสั่งที่ไม่แน่นอน
+- เปลี่ยนบัญชี, Kill Switch หรือหมด Session จะหยุด Auto ข้อมูลขาดการเชื่อมต่อจะพักจนกลับมาที่บัญชีเดิม
+- ดูสถานะ Auto และประวัติการส่งจากหน้า Terminal กดหยุด Auto เพื่อหยุดเปิดไม้ใหม่ Position เดิมยังมี SL/TP
+
+### เมื่อครบเวลา Session
+
+เปิดตัวเลือก **ครบเวลาให้ปิด Position และ Pending ของแอป** เป็นค่าเริ่มต้น เมื่อครบกำหนดจะหยุดเปิดไม้ใหม่ ยกเลิก Pending ก่อน แล้วส่งปิด Position ที่ symbol ตรงกับ Monitor และ Magic เป็นของแอป (`26000–26006`) รวมไม้ของแอปที่ถืออยู่ก่อนเริ่ม Session ไม่แตะ Position ของ EA ภายนอกที่ใช้ Magic อื่น
+
+กำหนดเวลาปิดบันทึกใน SQLite และยังทำงานหลัง restart (Auto เปิดไม้ใหม่ยังคงปิดหลัง restart) การกดหยุด Auto หยุดเฉพาะไม้ใหม่ กำหนดปิดเมื่อหมดเวลายังคงอยู่ รวมถึงระหว่าง Kill Switch หากเปลี่ยนบัญชีจะรอกลับมาบัญชี Demo เดิม หาก MT5 ไม่พร้อมหรือตลาดปิดจะคงสถานะรอส่งปิด และ retry เมื่อ Broker ปฏิเสธโดยทราบแน่ชัดว่ายังไม่ส่งสำเร็จ ห่างอย่างน้อย 15 วินาที กรณีไม่ทราบผลหลังส่งจะไม่ส่งปิดซ้ำจนตรวจ MT5
+
+หากปิดได้บางส่วน จะใช้ volume คงเหลือจาก snapshot ถัดไปเพื่อปิดส่วนที่เหลือ กำไร/ขาดทุนเมื่อปิดขึ้นกับราคาจับคู่จริง ไม่รับรองว่าปิดสำเร็จตรงวินาทีหมดเวลา โดยเฉพาะเมื่อตลาดปิดหรือเซิร์ฟเวอร์/MT5 ไม่ได้เปิดอยู่
+
+**ปิดก่อนถึง TP ได้**: กด **ปิด Position** ในตาราง Positions ตรวจ ticket/volume/P&L แล้วกดยืนยัน ระบบส่งคำสั่งปิดเต็ม volume ณ ราคาตลาด โดยใช้ position ticket และ Side ตรงข้าม กำไร/ขาดทุนจริงขึ้นกับราคาที่ Broker จับคู่และต้นทุน หาก Broker ปิดได้บางส่วน จะรายงาน volume ที่ปิดจริงและแสดงส่วนที่เหลือในตาราง ปุ่มปิดใช้ได้แม้ Kill Switch เปิดอยู่และไม่ต้องผ่านเพดานความเสี่ยงสำหรับเปิดไม้ใหม่
+
+หลังปิดผ่านแอปหรือระบบเห็น Position หายไปจาก MT5 จะเว้นสัญญาณที่มีอยู่และรอแท่งใหม่ จึงไม่เปิดกลับจากสัญญาณแท่งเดิม ถ้าต้องการพักหลังเก็บกำไร ให้กด **หยุด Auto** ด้วย
+
+### เปรียบเทียบกลยุทธ์
+
+หน้า Terminal มีตารางการประเมินแต่ละกลยุทธ์: สัญญาณ, สถานะการส่ง, จำนวนไม้ที่ถือ, จำนวนตัวอย่างที่เปิด และเหตุผล เช่น WAIT, ถือไม้เดิม, รอแท่งใหม่, Risk บล็อก หรือ Broker ปฏิเสธ แสดง Strategy/Magic ในตาราง Positions ด้วย
+
+หน้า AI & Analytics แยก **จำนวน Position ที่ปิดครบ, จำนวนที่ยังเปิด, Floating P&L และ Net P&L ที่ปิดแล้ว** พร้อม Win Rate, Profit Factor, Expectancy และ Drawdown ถ้ายังไม่มีไม้ปิด แสดง Win Rate เป็นขีดแทน 0% ไม่ใช้ Floating P&L ตัดสินว่ากลยุทธ์ทำกำไรได้จริง
+
+ทุกกลยุทธ์ยังต้องผ่านกติกาสัญญาณเดิม การถือได้สูงสุด 5 ไม้ไม่ได้บังคับเปิด 5 ไม้ หากทั้งหมด WAIT จะยังไม่เปิด และ AI Playbook ต้องผ่าน validation ก่อนเสมอ
+
+## กติกากลยุทธ์เริ่มต้น
+
+นี่เป็นกติกาของเวอร์ชันแรก เปิดปิดแต่ละกลยุทธ์และปรับค่าที่แสดงในหน้า Risk Management ได้ กติกาที่ละเอียดอยู่ใน `trade_app/strategies.py`
+
+| กลยุทธ์ | เงื่อนไข |
+|---|---|
+| SMC Liquidity Sweep + BOS | แท่งก่อนหน้ากวาด high / low ของ 20 แท่งก่อนหน้าแล้วกลับเข้ากรอบ จากนั้นแท่งล่าสุดปิดทะลุโครงสร้างอีกด้าน |
+| Supply / Demand Retest | หาแท่ง displacement ที่ body ≥ 1.3 ATR ใช้ high / low ของแท่งก่อน displacement เป็นโซน และรอ retest พร้อมแท่งยืนยัน |
+| EMA Trend Pullback | แนวโน้มจาก EMA20 / EMA50, แตะ EMA20 ในระยะ 0.25 ATR และปิดกลับตามแนวโน้ม |
+| Bollinger Bands Pullback | BB(20,2), แท่งก่อนปิดนอก band แล้วแท่งล่าสุดปิดกลับเข้ากรอบด้านเดียวกับ band |
+| Asian Range Breakout | กรอบ 07:00–13:00 เวลาไทยเป็นค่าเริ่มต้น ต้องมีอย่างน้อย 3 แท่งในกรอบ รอแท่งหลังหมดช่วงปิดทะลุ high / low |
+| AI Playbook | Logistic Regression จากสคริปต์เดิมบน H1, validation 250 แท่ง, ต้องมี ≥ 20 สัญญาณและความแม่นยำทิศทาง ≥ 55%; threshold เริ่มต้น 0.60 |
+
+5 กลยุทธ์แรกใช้ M15 ส่วน AI ใช้ H1 เมื่อยังไม่มีเงื่อนไขหรือข้อมูลไม่พอแสดง `WAIT` ทุกกลยุทธ์สร้าง SL/TP ด้วย R:R ที่ตั้งไว้ ค่า AI คือการคาดทิศทางแท่งถัดไป ยังไม่ใช่โอกาสทำกำไร ผล validation ยังไม่รวมต้นทุนการเทรด
+
+## สถิติ
+
+- Journal แสดง **Deals** รวม entry และ exit ส่วน Win Rate / Profit Factor / Expectancy คำนวณจาก **Position lifecycle ที่ปิดครบ** รวมการปิดบางส่วนและต้นทุนตอนเข้า
+- Reversal จบ lifecycle เดิมและเริ่มอันใหม่ แบ่ง Commission/Fee ตาม volume ประวัติที่ขาด deal ตอนเข้าไม่ถูกนับเป็นผลเทรดที่ปิดครบ
+- เงินฝากและเครดิตไม่ถูกนับเป็นการชนะหรือกำไรจากการเทรด
+- Daily P&L รวม Profit + Commission + Swap + Fee ของ Deals วันนี้ตามเวลาไทย รีเซ็ต 00:00
+- Cumulative P&L ใช้ผล Position ที่ปิดครบ Live Equity บันทึกทุก 30 วินาทีตั้งแต่เริ่มใช้งาน จึงไม่มี Equity ย้อนหลังก่อนเปิดแอป
+- Trade P&L Drawdown วัดจากยอดกำไรสะสมสูงสุด Equity Drawdown วัดจากตัวอย่าง Equity ที่เก็บไว้
+
+## Risk และ execution
+
+### แนะนำ SL / TP ใน Terminal
+
+เข้า Terminal ครั้งแรกจะเติม SL/TP เมื่อทั้งสองช่องยังว่างและเป็น Market โดยใช้ Bid/Ask ปัจจุบัน มีปุ่ม **แนะนำ SL / TP จากราคาและแนวโน้ม** เพื่อคำนวณใหม่ รวมทั้งปุ่มเติมเฉพาะ SL หรือ TP ราคาอัปเดตทุก 3 วินาทีแต่ไม่เปลี่ยนค่าที่เติมหรือแก้ไว้เอง
+
+ใช้แท่ง M15 ที่ปิดแล้วอย่างน้อย 80 แท่ง: EMA20/50 พร้อมความชัน EMA20 ใน 3 แท่งและระยะห่าง EMA ขั้นต่ำ 0.1 ATR ประเมินแนวโน้มเป็นขึ้น ลง หรือ Sideways ใช้ ATR14 แบบ Wilder เป็นฐานความผันผวน ระยะ SL เลือกจุดที่ห่างกว่าระหว่าง 1.5 ATR เมื่อตามแนวโน้ม, 1.75 ATR เมื่อ Sideways, 2 ATR เมื่อสวนแนวโน้ม กับ high/low 20 แท่ง + buffer 0.25 ATR และระยะขั้นต่ำของ Broker
+
+TP ใช้ R:R จากการตั้งค่า ปัด SL/TP ออกจาก Entry ตาม tick size ถ้าเลือกเฉพาะ TP จะใช้ SL ที่กรอกไว้เพื่อคำนวณระยะเป้าหมาย แสดงข้อมูลแนวโน้ม ATR ราคาและเวลาที่คำนวณ รวมถึงหมายเหตุเมื่อสวนแนวโน้มหรือมีขอบราคา 20 แท่งขวางทาง TP ไม่เปลี่ยน Side ที่เลือก
+
+ระบบจะไม่แนะนำจาก tick เกิน 180 วินาที, ประวัติที่ยังไม่ทันราคา หรือ Pending Entry ที่ไม่ถูกต้อง ค่าที่แนะนำเป็นกฎเริ่มต้น ไม่ใช่กลยุทธ์ที่ยืนยันผลกำไร ต้องตรวจ Lot และ Risk ผ่านระบบเดิมก่อนส่งทุกครั้ง
+
+แนวคิดพื้นฐาน: [EMA ใช้ประเมินแนวโน้ม](https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/ema) และ [ATR วัดความผันผวนและประยุกต์กับระยะ stop](https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/atr) ส่วนสูตรผสมและตัวคูณข้างต้นเป็นกฎของแอปนี้
+
+- Lot อัตโนมัติใช้ `order_calc_profit` ในสกุลเงินบัญชี ปัดลงตาม volume step ของ Broker ตรวจ Free Margin ด้วย `order_calc_margin`
+- ตรวจ SL/TP, stop level, tick size, spread, tick อายุไม่เกิน 180 วินาที และ Risk ต่อไม้ Risk ที่ SL เป็นค่าประมาณไม่รวม slippage และต้นทุนเพิ่มเติม
+- งบขาดทุนรายวันรวมขาดทุนสุทธิที่ปิดแล้ววันนี้, Floating Loss, ความเสี่ยงจากราคาปัจจุบันถึง SL ของ Position เดิม และ Entry ถึง SL ของ Pending เดิมทั้งหมด หากมี exposure ไม่มี SL จะบล็อกคำสั่งใหม่
+- จำนวนออเดอร์นับ Positions + Pending ทั้งบัญชี รวม EA ภายนอก
+- บัญชี Netting เปิดใหม่ได้เมื่อไม่มี Position/Pending ของ symbol เดียวกัน เพื่อป้องกันการรวม Position หรือ reversal เปลี่ยน SL โดยไม่ผ่านแผนรวม จัดการ exposure เดิมผ่าน MT5 ก่อนเปิดใหม่
+- ก่อน `order_send` อ่านบัญชีและตรวจ Risk ใหม่ จากนั้นเรียก `order_check` ของ Broker รองรับผลสำเร็จบางส่วน ไม่มีการส่งซ้ำอัตโนมัติเมื่อไม่ทราบผล
+- บันทึก Request ID ก่อนส่งเพื่อกันคำสั่งซ้ำจาก retry หากผลไม่แน่นอนให้ตรวจ MT5 / Journal ก่อนสร้างคำสั่งใหม่
+- แอปจะรายงานข้อผิดพลาดเมื่อข้อมูลไม่ครบหรือเชื่อมต่อไม่ได้ ไม่สลับไปใช้ข้อมูลจำลองเอง บัญชีเงินจริงดูข้อมูลได้ แต่ส่งคำสั่งและยกเลิก Pending ผ่านแอปไม่ได้
+
+## Kill Switch และ Magic Number
+
+Kill Switch บันทึกลงฐานข้อมูล **ก่อน** ติดต่อ MT5 เพื่อบล็อกคำสั่งใหม่เมื่อได้ lock คงสถานะหลัง restart แล้วพยายามยกเลิก Pending ที่ใช้ Magic ของแอป ถ้ายกเลิกไม่สำเร็จแสดงเหตุผล
+
+**Kill Switch ไม่ปิด Position ที่เปิดอยู่ และไม่หยุด EA ภายนอกหรือคำสั่งผ่าน MT5 โดยตรง** SL/TP เดิมยังทำงานที่ Broker แม้แอปปิดอยู่
+
+สำรอง Magic `26000` สำหรับ Manual ของ Terminal และ `26001–26006` สำหรับ 6 กลยุทธ์ตามลำดับในตาราง ไม่ควรให้ EA ภายนอกใช้เลขเหล่านี้ Magic `0` แสดงเป็น Manual, Magic อื่นแสดงเป็น `EA #เลข` ตั้งชื่อได้ เช่น:
+
+```text
+12345=Gold Scalper
+67890=London Breakout EA
+```
+
+## ข้อมูลและการรัน
+
+- SQLite อยู่ที่ `data/trade.db`: การตั้งค่า, Kill Switch, Equity samples, Request IDs และบัญชี Paper
+- Equity และ Request IDs แยกตามโหมด Server และ Account Login ข้อมูลจำลองไม่ปะปนกับ MT5
+- Journal โหมด MT5 อ่านประวัติ Broker ตั้งแต่ปี 2000 ตามข้อมูลที่ MT5 ให้ หากขาดการเชื่อมต่อแสดง Offline และงดส่งคำสั่ง
+- รันเซิร์ฟเวอร์เดียวต่อฐานข้อมูลบนเครื่องนี้: bind `127.0.0.1`, ตรวจ Host, Origin และ session token สำหรับคำสั่งที่เปลี่ยนข้อมูล
+- กราฟใช้ Canvas ภายในแอป ไม่มีบริการราคาภายนอก ฟอนต์ Google เป็นส่วนตกแต่ง มีฟอนต์สำรองหากอินเทอร์เน็ตใช้ไม่ได้
+
+## ทดสอบ
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+node tests/test_levels.cjs
+.\.venv\Scripts\python.exe -m tests.browser_smoke
+```
+
+Unit/API tests ใช้บัญชี Paper แยกฐานข้อมูลชั่วคราว ตรวจ Risk, MT5 request mapping, สถิติ partial close / reversal, CSV, session protection, คำสั่งซ้ำ และ Kill Switch
+
+Browser smoke ใช้ Chrome ที่ `C:/Program Files/Google/Chrome/Application/chrome.exe` บนเครื่องนี้ เริ่มเซิร์ฟเวอร์ Paper ชั่วคราวที่ port 8011 ทดสอบ Market / Limit / Stop, cancel, CSV, settings, persistent kill และมือถือ รูปหน้าจออยู่ใน `artifacts/` ไม่มีการส่งคำสั่งไป MT5 ในชุดทดสอบ
+
+**การเชื่อมต่อและ execution กับ Broker ยังต้องทดสอบบน MT5 Demo ที่ล็อกอินอยู่** ผลโหมดจำลองและ unit tests ไม่ยืนยันว่าแต่ละ Broker จะยอมรับคำสั่ง
+
+เอกสารทางการที่ใช้ประกอบ implementation: [order_send](https://www.mql5.com/en/docs/python_metatrader5/mt5ordersend_py), [order_calc_profit](https://www.mql5.com/en/docs/python_metatrader5/mt5ordercalcprofit_py), [history_deals_get](https://www.mql5.com/en/docs/python_metatrader5/mt5historydealsget_py)
