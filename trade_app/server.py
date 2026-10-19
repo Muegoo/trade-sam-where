@@ -1,4 +1,5 @@
 import argparse
+import copy
 import csv
 import io
 import os
@@ -20,6 +21,8 @@ from .risk import day_net, preview
 from .store import Store
 from .strategies import scan
 from .monitor import Monitor
+from .research_api import install_research
+from .forward_shadow import ForwardShadow
 
 ROOT = Path(__file__).resolve().parent
 
@@ -94,6 +97,8 @@ def create_app(mode="simulation", symbol="XAUUSD", db_path=None):
     state = {"connected": False, "mode": mode, "symbol": symbol, "error": "กำลังเชื่อมต่อ"}
     model_cache = {"bar": None, "result": {}}
     signals_cache = {"bar": None, "settings": None, "result": []}
+    forward_shadow = ForwardShadow()
+    forward_cache = {"value": None}
     stop = threading.Event()
 
     def update(run_monitor=False):
@@ -134,14 +139,34 @@ def create_app(mode="simulation", symbol="XAUUSD", db_path=None):
                              journal=rows, curve=curve, analytics=results, signals=signals_cache["result"],
                              settings=settings, day_net=day_net(snap["deals"]),
                              spread=(snap["tick"]["ask"]-snap["tick"]["bid"])/snap["info"]["point"])
+                def closed_rows(rows):
+                    result = []
+                    for row in rows:
+                        opened = int(row["time"])
+                        if opened + 3600 <= time.time():
+                            result.append({"time": opened, **{name: float(row[name])
+                                for name in ("open", "high", "low", "close")}})
+                    return result
+                forward_cache["value"] = {"connected": True, "mode": mode, "symbol": symbol,
+                    "scope": snap["scope"], "observed_at": time.time(), "account": copy.deepcopy(snap["account"]),
+                    "info": copy.deepcopy(snap["info"]), "tick": copy.deepcopy(snap["tick"]),
+                    "bars": copy.deepcopy(closed), "h1": closed_rows(h1),
+                    "signals": copy.deepcopy(signals_cache["result"]), "settings": copy.deepcopy(settings)}
             except Exception as exc:
                 monitor.connection_error()
+                forward_cache["value"] = None
                 state.clear()
                 state.update(connected=False, mode=mode, symbol=symbol, error=str(exc), updated=int(time.time()), settings=store.settings())
 
     def poll():
         while not stop.is_set():
             update(run_monitor=True)
+            with lock:
+                observation = copy.deepcopy(forward_cache.get("value"))
+                if observation is None:
+                    observation = {"connected": False, "mode": mode, "symbol": symbol,
+                                   "observed_at": time.time()}
+            forward_shadow.observe(observation)
             stop.wait(3)
 
     @asynccontextmanager
@@ -151,6 +176,7 @@ def create_app(mode="simulation", symbol="XAUUSD", db_path=None):
         yield
         stop.set()
         worker.join(timeout=10)
+        app.state.research.close()
         with lock:
             broker.close()
             store.db.close()
@@ -158,6 +184,48 @@ def create_app(mode="simulation", symbol="XAUUSD", db_path=None):
     app = FastAPI(title="Trade Sam Where", lifespan=lifespan)
     app.state.store, app.state.broker, app.state.refresh = store, broker, update
     app.state.monitor = monitor
+
+    def research_settings():
+        with lock:
+            return dict(store.settings())
+
+    def research_memory():
+        with lock:
+            account = state.get("account", {})
+            if not state.get("connected") or mode != "simulation" and not account.get("is_demo"):
+                return []
+            source = "simulation" if mode == "simulation" else "broker_demo"
+            rows = state.get("analytics", {}).get("closed_trades", [])
+            return [{"symbol": row.get("symbol"), "closed_at": row.get("time"),
+                     "net": row.get("net"), "source": source, "completed": True,
+                     "risk_cash": row.get("risk_cash")} for row in rows]
+
+    def collection_status():
+        with lock:
+            if mode != "mt5":
+                return {"available": False, "reason": "Historical MT5 collection requires MT5 mode"}
+            account = state.get("account", {})
+            if not state.get("connected") or not account.get("is_demo"):
+                return {"available": False, "reason": "Connect a demo account in MT5 first"}
+            return {"available": True, "reason": None}
+
+    def research_history(start, end):
+        with lock:
+            if monitor.enabled or monitor.close_on_expiry or forward_shadow.active:
+                raise BrokerError("Stop Monitor and forward shadow before collecting MT5 history")
+            if mode != "mt5" or not state.get("connected") or not state.get("account", {}).get("is_demo"):
+                raise BrokerError("Historical MT5 collection requires a connected demo account")
+            return broker.research_history(start, end)
+
+    def forward_context():
+        with lock:
+            context = copy.deepcopy(forward_cache.get("value"))
+            if context is None:
+                return None
+            context["linear_model_valid"] = (True if mode == "simulation" else
+                broker.validate_research_instrument(context["info"], context["tick"],
+                                                    context["account"].get("currency")))
+            return context
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -174,6 +242,11 @@ def create_app(mode="simulation", symbol="XAUUSD", db_path=None):
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
+
+    install_research(app, research_settings, research_memory, lambda: token,
+        history_provider=research_history, collection_status_provider=collection_status,
+        monitor_blocked_provider=lambda: monitor.enabled or monitor.close_on_expiry,
+        forward=forward_shadow, forward_context_provider=forward_context, broker_lock=lock)
 
     @app.get("/")
     def index():

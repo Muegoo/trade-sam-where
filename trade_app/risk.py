@@ -7,7 +7,7 @@ from .broker import BrokerError
 
 
 def day_net(deals, now=None):
-    today = datetime.fromtimestamp(now or time.time(), BANGKOK).date()
+    today = datetime.fromtimestamp(time.time() if now is None else now, BANGKOK).date()
     return sum(sum(d.get(k, 0) for k in ("profit", "commission", "swap", "fee"))
                for d in deals if d["type"] in (0, 1) and datetime.fromtimestamp(d["time"], BANGKOK).date() == today)
 
@@ -16,7 +16,7 @@ def floor_lot(value, step):
     return float((Decimal(str(value)) / Decimal(str(step))).to_integral_value(rounding=ROUND_FLOOR) * Decimal(str(step)))
 
 
-def preview(order, snap, settings, broker):
+def preview(order, snap, settings, broker, now=None):
     a, info, tick = snap["account"], snap["info"], snap["tick"]
     errors = []
     side, kind = order["side"], order["kind"]
@@ -34,7 +34,8 @@ def preview(order, snap, settings, broker):
         errors.append("เวอร์ชันนี้ส่งคำสั่งได้เฉพาะบัญชี Demo")
     if not a["trade_allowed"]:
         errors.append("MT5 ไม่อนุญาต Algo Trading / Python Trading")
-    if time.time() - tick["time"] > 180 or tick["bid"] <= 0 or tick["ask"] <= tick["bid"]:
+    checked_at = time.time() if now is None else now
+    if checked_at - tick["time"] > 180 or tick["bid"] <= 0 or tick["ask"] <= tick["bid"]:
         errors.append("ราคาเก่าหรือไม่ถูกต้อง; รอ tick ล่าสุด")
     if a["equity"] <= 0:
         errors.append("Equity ต้องมากกว่า 0")
@@ -82,7 +83,7 @@ def preview(order, snap, settings, broker):
         errors.append("Risk ต่อไม้เกินค่าที่กำหนด")
     if margin > a["margin_free"]:
         errors.append("Free Margin ไม่เพียงพอ")
-    realized = day_net(snap["deals"])
+    realized = day_net(snap["deals"], checked_at)
     daily_used = max(0, -realized) + sum(max(0, -p.get("profit", 0)) for p in snap["positions"])
     # Reserve downside to all existing SLs; an unprotected exposure blocks new orders.
     exposure = 0.0

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import math
 import time
+from datetime import timedelta
 from .analytics import MAGICS, APP_MANUAL_MAGIC
 
 UTC = timezone.utc
@@ -12,6 +13,39 @@ class BrokerError(RuntimeError):
 
 class BrokerRejected(BrokerError):
     """Failure before order_send; no execution can have occurred."""
+
+
+def validate_linear_research_model(mt5, symbol, info, tick, currency):
+    try:
+        info = info._asdict() if hasattr(info, "_asdict") else info
+        tick = tick._asdict() if hasattr(tick, "_asdict") else tick
+        if info.get("currency_profit") != currency:
+            raise BrokerError("Unsupported profit currency conversion")
+        point, tick_size = float(info["point"]), float(info["trade_tick_size"])
+        contract_size, volume_min = float(info["trade_contract_size"]), float(info["volume_min"])
+        bid, ask = float(tick["bid"]), float(tick["ask"])
+    except BrokerError:
+        raise
+    except (AttributeError, KeyError, TypeError, ValueError, OverflowError):
+        raise BrokerError("Invalid MT5 instrument specification or quote") from None
+    if not all(math.isfinite(value) and value > 0 for value in
+               (point, tick_size, contract_size, volume_min, bid, ask)) or ask <= bid:
+        raise BrokerError("Invalid MT5 instrument specification")
+    for order_type, entry, exit_price in (
+            (mt5.ORDER_TYPE_BUY, ask, ask + 10 * tick_size),
+            (mt5.ORDER_TYPE_BUY, ask, ask - 10 * tick_size),
+            (mt5.ORDER_TYPE_SELL, bid, bid - 10 * tick_size),
+            (mt5.ORDER_TYPE_SELL, bid, bid + 10 * tick_size)):
+        if exit_price <= 0:
+            raise BrokerError("Instrument prices do not support the linear dataset model")
+        linear = ((exit_price - entry) if order_type == mt5.ORDER_TYPE_BUY else (entry - exit_price)) * contract_size * volume_min
+        try:
+            actual = float(mt5.order_calc_profit(order_type, symbol, volume_min, entry, exit_price))
+        except (TypeError, ValueError, OverflowError):
+            actual = math.nan
+        if not math.isfinite(actual) or not math.isclose(actual, linear, rel_tol=1e-6, abs_tol=1e-4):
+            raise BrokerError("Instrument P&L is not supported by the linear dataset model")
+    return True
 
 
 class MT5Broker:
@@ -46,6 +80,64 @@ class MT5Broker:
                 "deals": [d._asdict() for d in deals],
                 "bars": [{k: (int(b[k]) if k in ("time", "tick_volume", "spread", "real_volume") else float(b[k])) for k in bars.dtype.names} for b in bars],
                 "h1": h1, "scope": f"mt5:{account.server}:{account.login}"}
+
+    def validate_research_instrument(self, info, tick, currency):
+        return validate_linear_research_model(self.mt5, self.symbol, info, tick, currency)
+
+    def research_history(self, start, end):
+        """Read bounded UTC history without initializing or shutting down MT5."""
+        m = self.mt5
+        if (not isinstance(start, datetime) or not isinstance(end, datetime) or
+                start.tzinfo is None or end.tzinfo is None or
+                start.utcoffset() != timedelta(0) or end.utcoffset() != timedelta(0) or
+                start.microsecond or end.microsecond or start >= end):
+            raise BrokerError("Research range must be whole-second UTC datetimes with start < end")
+        now = datetime.now(UTC).replace(microsecond=0)
+        if end > now or end - start > timedelta(days=31):
+            raise BrokerError("Research range must end by now and span at most 31 days")
+        account, terminal = m.account_info(), m.terminal_info()
+        if account is None or terminal is None or not terminal.connected:
+            raise BrokerError("กรุณาเปิด MT5 และล็อกอินบัญชี Demo")
+        if account.trade_mode != m.ACCOUNT_TRADE_MODE_DEMO:
+            raise BrokerError("Research history is available only on a demo account")
+        if not m.symbol_select(self.symbol, True):
+            raise BrokerError(f"ไม่พบ {self.symbol}; ตรวจชื่อใน Market Watch")
+        info = m.symbol_info(self.symbol)
+        tick = m.symbol_info_tick(self.symbol)
+        if info is None or tick is None:
+            raise BrokerError(f"ข้อมูล MT5 ไม่ครบ: {m.last_error()}")
+        currency = account.currency
+        self.validate_research_instrument(info, tick, currency)
+
+        ticks = []
+        cursor = start
+        while cursor < end:
+            chunk_end = min(cursor + timedelta(hours=1), end)
+            batch = m.copy_ticks_range(self.symbol, cursor, chunk_end, m.COPY_TICKS_INFO)
+            if batch is None:
+                raise BrokerError(f"MT5 tick history unavailable: {m.last_error()}")
+            if len(batch) > 500_000 - len(ticks):
+                raise BrokerError("MT5 tick history exceeds 500000 records")
+            ticks.extend(batch)
+            cursor = chunk_end
+        if len(ticks) > 500_000:
+            raise BrokerError("MT5 tick history exceeds 500000 records")
+        rates = {}
+        for frame, timeframe, warmup, seconds in (
+                ("M15", m.TIMEFRAME_M15, 1200, 900), ("H1", m.TIMEFRAME_H1, 1200, 3600)):
+            bar_start = max(datetime(1970, 1, 1, tzinfo=UTC), start - timedelta(seconds=warmup * seconds))
+            rows = m.copy_rates_range(self.symbol, timeframe, bar_start, end)
+            if rows is None:
+                raise BrokerError(f"MT5 {frame} history unavailable: {m.last_error()}")
+            if len(rows) > 20_000:
+                raise BrokerError(f"MT5 {frame} history exceeds 20000 bars")
+            rates[frame] = [{key: (int(row[key]) if key in ("time", "tick_volume", "spread", "real_volume") else float(row[key]))
+                             for key in rows.dtype.names} for row in rows]
+        return {"symbol": self.symbol, "currency": currency, "info": info._asdict(),
+                "ticks": [{key: int(row[key]) if key in ("time", "time_msc", "flags") else float(row[key])
+                           for key in row.dtype.names} for row in ticks],
+                "bars": rates, "requested_range": {"start": int(start.timestamp()), "end": int(end.timestamp())},
+                "fetched_at": int(now.timestamp())}
 
     def profit(self, side, symbol, lot, entry, exit_price):
         m = self.mt5

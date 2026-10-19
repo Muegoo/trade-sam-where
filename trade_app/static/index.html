@@ -11,6 +11,7 @@
     <button class="nav" data-page="journal"><span>▤</span> Trading Journal</button>
     <button class="nav" data-page="analytics"><span>✧</span> AI & Analytics</button>
     <button class="nav" data-page="risk"><span>◇</span> Risk Management</button>
+    <button class="nav" data-page="research"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5m0 14h16M7 15l4-4 3 2 5-6"/></svg></span> Research</button>
   </nav>
   <div class="sidebar-bottom"><div class="account-label">ACCOUNT MODE</div><b id="modeLabel">กำลังโหลด…</b><p>เวลาแสดงผล Asia/Bangkok<br>สแกนสัญญาณทุก 3 วินาที</p><div class="mini-status"><i id="statusDot"></i><span id="connection">Connecting</span></div></div>
 </aside>
@@ -78,10 +79,97 @@
       </article><div><article class="panel kill-panel"><div class="panel-head"><h2>Emergency control</h2><span class="badge negative">KILL SWITCH</span></div><div class="kill-icon">⏹</div><h3 id="killTitle">ระบบพร้อมรับคำสั่ง</h3><p>เมื่อเปิด Kill Switch ระบบจะบล็อกคำสั่งใหม่และยกเลิก Pending ของกลยุทธ์ในแอปนี้ สถานะจะคงอยู่หลังเปิดแอปใหม่</p><p class="caption">Position ที่เปิดอยู่ยังคงมี SL/TP ทำงานใน MT5 การเทรดจาก EA ภายนอกและการเทรดผ่าน MT5 ต้องหยุดจาก MT5 เอง</p><button id="killMain" class="button danger full">เปิด Kill Switch</button></article>
       <article class="panel"><div class="panel-head"><h2>Risk monitor</h2></div><div id="riskMonitor"></div></article></div></div>
     </section>
+    <section id="research" class="page" aria-labelledby="researchTitle">
+      <article class="panel">
+        <div class="panel-head"><div><h2 id="researchTitle">Research workspace</h2><p>นำเข้าข้อมูลย้อนหลังและตรวจผลจำลองใน session นี้</p></div><span id="researchProviderStatus" class="badge muted">Advisor: —</span></div>
+        <form id="researchImportForm" class="research-import">
+          <label for="researchDatasetFile">ไฟล์ dataset JSON <small>สูงสุด 8 MiB · ข้อมูลและงานจะหายเมื่อปิดหรือเริ่มแอปใหม่</small></label>
+          <div class="research-inline"><input id="researchDatasetFile" type="file" accept="application/json,.json" required><button id="researchImport" class="button secondary" type="submit">นำเข้า dataset</button></div>
+          <p id="researchImportStatus" class="research-status" role="status" aria-live="polite">เลือกไฟล์ dataset เพื่อเริ่มต้น</p>
+        </form>
+        <div class="research-dataset-row"><label for="researchDatasetSelect">Dataset ที่เลือก</label><select id="researchDatasetSelect" disabled><option value="">ยังไม่มี dataset</option></select><div id="researchDatasetDetails" class="caption">นำเข้าไฟล์เพื่อดูแหล่งข้อมูล ช่วงเวลา และจำนวนแท่ง</div></div>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><div><h2>เก็บประวัติจาก MT5</h2><p>ดึง ticks และแท่ง M15/H1 จากบัญชี MT5 Demo แล้วสร้าง dataset พร้อมรายงานช่องว่าง</p></div><span id="researchCollectionBadge" class="badge muted">กำลังตรวจสอบ MT5</span></div>
+        <p id="researchCollectionAvailability" class="caption" role="status" aria-live="polite">กำลังตรวจสอบการเชื่อมต่อ MT5</p>
+        <form id="researchCollectForm" class="research-form">
+          <div class="form-row"><label for="researchCollectStart">เริ่มช่วงเวลา (UTC)<input id="researchCollectStart" type="datetime-local" step="1"></label><label for="researchCollectEnd">สิ้นสุดช่วงเวลา (UTC)<input id="researchCollectEnd" type="datetime-local" step="1"></label></div>
+          <label for="researchGapThreshold">แจ้งช่องว่างราคาเกิน (วินาที)<input id="researchGapThreshold" type="number" min="1" max="86400" step="1" value="60"></label>
+          <button id="researchCollect" class="button secondary" type="submit" disabled>เก็บข้อมูลจาก MT5</button>
+        </form>
+        <p id="researchCollectStatus" class="research-status" role="status" aria-live="polite">การเก็บข้อมูลใช้ได้เมื่อเชื่อมต่อ MT5 Demo</p>
+        <div id="researchCollectionReport" class="research-result" aria-live="polite"><p class="empty">รายงานช่วงข้อมูลจะแสดงหลังเก็บข้อมูลเสร็จ</p></div>
+        <button id="researchDownloadCollectedDataset" type="button" class="button secondary" disabled>ดาวน์โหลด dataset ที่เลือก</button>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><div><h2>สมมติฐานต้นทุนและหลักประกัน</h2><p>กรอกค่าจากบัญชีหรือ broker เอง ระบบจะไม่เติมค่าใช้จ่ายที่คาดเดา</p></div></div>
+        <fieldset class="research-costs"><legend>ค่าที่ใช้ร่วมกันสำหรับ MT5 collection และ forward shadow</legend>
+          <div class="form-row"><label for="researchCommission">Commission / lot / side<input id="researchCommission" type="number" min="0" step="any" inputmode="decimal"></label><label for="researchFee">Fee / lot / side<input id="researchFee" type="number" min="0" step="any" inputmode="decimal"></label></div>
+          <div class="form-row"><label for="researchSlippage">Slippage (points)<input id="researchSlippage" type="number" min="0" step="any" inputmode="decimal"></label><label for="researchMargin">Margin / lot<input id="researchMargin" type="number" min="0" step="any" inputmode="decimal"></label></div>
+          <div class="form-row"><label for="researchSwapLong">Swap long / lot / day<input id="researchSwapLong" type="number" step="any" inputmode="decimal"></label><label for="researchSwapShort">Swap short / lot / day<input id="researchSwapShort" type="number" step="any" inputmode="decimal"></label></div>
+          <div class="form-row"><label for="researchRolloverHour">Rollover hour (UTC)<input id="researchRolloverHour" type="number" min="0" max="23" step="1"></label><label for="researchTripleSwap">Triple-swap weekday (UTC)<select id="researchTripleSwap"><option value="">ไม่ระบุ</option><option value="6">วันอาทิตย์</option><option value="0">วันจันทร์</option><option value="1">วันอังคาร</option><option value="2">วันพุธ</option><option value="3">วันพฤหัสบดี</option><option value="4">วันศุกร์</option><option value="5">วันเสาร์</option></select></label></div>
+          <fieldset class="research-weekdays"><legend>วัน rollover (UTC) · เลือกวันหรือยืนยันว่าไม่มี</legend><div class="toggles">
+            <label><input type="checkbox" name="researchRolloverWeekday" value="6"> อาทิตย์</label><label><input type="checkbox" name="researchRolloverWeekday" value="0"> จันทร์</label><label><input type="checkbox" name="researchRolloverWeekday" value="1"> อังคาร</label><label><input type="checkbox" name="researchRolloverWeekday" value="2"> พุธ</label><label><input type="checkbox" name="researchRolloverWeekday" value="3"> พฤหัสบดี</label><label><input type="checkbox" name="researchRolloverWeekday" value="4"> ศุกร์</label><label><input type="checkbox" name="researchRolloverWeekday" value="5"> เสาร์</label>
+          </div><label class="research-check"><input id="researchNoRolloverDays" type="checkbox"> ยืนยันว่าไม่มีวัน rollover</label></fieldset>
+          <p class="caption">ค่าต้นทุนต้องกรอกครบทุกครั้งที่เริ่ม collection หรือ forward shadow; triple swap เว้นว่างได้</p>
+        </fieldset>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><div><h2>เริ่มงานวิจัย</h2><p>ผลลัพธ์เป็นการวิเคราะห์ย้อนหลังหรือ shadow เท่านั้น</p></div></div>
+        <form id="researchRunForm">
+          <div class="form-row research-kind-row"><label for="researchKind">ชนิดงาน<select id="researchKind"><option value="replay">Replay · ตรวจข้อเสนอ</option><option value="evaluate">Evaluate · ประเมินกลยุทธ์</option><option value="compare">A/B · เปรียบเทียบกฎและผู้วิเคราะห์</option><option value="shadow">Shadow · ตรวจข้อเสนอ ณ เวลา</option><option value="advisor">Advisor · สร้างข้อเสนอแบบ shadow</option></select></label><div id="researchKindHelp" class="caption">Replay จำลองข้อเสนอด้วยข้อมูลและค่า Risk ที่บันทึกเมื่อเริ่มงาน</div></div>
+          <div id="researchProposalsWrap"><label for="researchProposalsFile">ไฟล์ proposals JSON <small>Replay และ Shadow ต้องใช้รายการข้อเสนอ</small></label><input id="researchProposalsFile" type="file" accept="application/json,.json"><p id="researchProposalStatus" class="caption">ไฟล์จะถูกส่งตามข้อความดิบเพื่อให้ server ตรวจ JSON และ key ซ้ำได้</p></div>
+          <div id="researchStrategiesWrap" hidden><fieldset class="research-strategies"><legend>กลยุทธ์ที่ต้องการประเมิน</legend><div id="researchStrategies" class="toggles"></div></fieldset></div>
+          <div id="researchWalkForwardWrap" hidden></div>
+          <div id="researchCompareWrap" hidden>
+            <div class="form-row"><label for="researchCompareStrategy">กลยุทธ์เดียวสำหรับทุก variant<select id="researchCompareStrategy"><option value="smc">SMC Sweep + BOS · M15</option><option value="supply">Supply / Demand · M15</option><option value="ema">EMA Pullback · M15</option><option value="bollinger">Bollinger Pullback · M15</option><option value="asian">Asian Breakout · M15</option><option value="ai">AI Playbook · H1</option></select></label><label for="researchCompareBudget">งบสูงสุดสำหรับ LLM decisions<input id="researchCompareBudget" type="number" min="1" max="20" step="1" value="10"></label></div>
+            <p class="caption">A ใช้กฎเดิม · B เพิ่ม calendar gate · C ต้องมี analyst เห็นด้วย · D ต้องผ่าน challenger ด้วย C/D ใช้ provider ที่ตั้งค่าเองเท่านั้น; ถ้าปิดไว้จะแสดง unavailable ไม่มีการแทนผลว่างด้วยศูนย์</p>
+          </div>
+          <div class="form-row research-basics" id="researchBasics"><label>Initial balance<input id="researchInitialBalance" type="number" min="0.01" step="any" value="10000"></label><label>Latency (seconds)<input id="researchLatency" type="number" min="0" step="1" value="0"></label></div>
+          <div class="form-row research-calendar" id="researchCalendar"><label>Calendar ก่อน (นาที)<input id="researchCalendarBefore" type="number" min="0" max="1440" step="1" value="0"></label><label>Calendar หลัง (นาที)<input id="researchCalendarAfter" type="number" min="0" max="1440" step="1" value="0"></label></div>
+          <div id="researchAsOfWrap" hidden><label for="researchAsOf">เวลาประเมิน (UTC)</label><input id="researchAsOf" type="datetime-local" step="1"><p class="caption">เวลาเริ่มต้นใช้เวลาของ quote ล่าสุดใน dataset; ระบบแปลงเป็น UTC ก่อนส่ง</p></div>
+          <div id="researchAdvisorOptions" hidden>
+            <div class="form-row"><label>Provider<select id="researchProvider"><option value="disabled">Disabled · ไม่เรียก provider</option><option value="openai">OpenAI</option><option value="gemini">Gemini</option></select></label><label>Model<input id="researchModel" type="text" autocomplete="off" placeholder="ระบุ model ที่ตั้งค่าไว้กับ provider"></label></div>
+            <label>API key<input id="researchApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="ใส่เฉพาะเมื่อเลือก provider ที่ตั้งค่าไว้"></label>
+            <label class="research-check"><input id="researchChallenger" type="checkbox" checked> ให้ challenger ตรวจข้อเสนออีกครั้ง (ไม่เกิน 2 calls)</label>
+            <details class="research-advanced"><summary>ตัวเลือกเพิ่มเติม</summary><div class="form-row"><label>Max output tokens<input id="researchTokens" type="number" min="128" max="2048" step="1" placeholder="1200"></label><label>Timeout (seconds)<input id="researchTimeout" type="number" min="1" max="30" step="1" value="20"></label></div></details>
+            <p id="researchProviderHelp" class="caption">เมื่อเลือก provider และส่งงาน ระบบจะส่ง snapshot, ข่าวที่นำเข้า และ demo memory ให้ provider ที่เลือก</p>
+          </div>
+          <p id="researchSettingsNote" class="caption">งานใช้ snapshot ค่า Risk ปัจจุบันของแอป ณ ตอนเริ่ม</p>
+          <button id="researchRun" class="button primary" type="submit" disabled>เริ่มงาน</button>
+        </form>
+        <p id="researchJobStatus" class="research-status" role="status" aria-live="polite">ยังไม่มีงานที่กำลังทำ</p>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><div><h2>Forward shadow</h2><p>เริ่มติดตามแท่งใหม่และประเมินผลเสมือนโดยไม่ส่งคำสั่ง</p></div><span id="researchForwardBadge" class="badge muted">ยังไม่เริ่ม</span></div>
+        <p id="researchForwardMode" class="caption">โหมดบัญชีจะระบุเมื่อโหลดสถานะ</p>
+        <form id="researchForwardForm" class="research-form">
+          <div class="form-row"><label for="researchForwardStrategy">Strategy<select id="researchForwardStrategy"><option value="smc">SMC Sweep + BOS · M15</option><option value="supply">Supply / Demand · M15</option><option value="ema">EMA Pullback · M15</option><option value="bollinger">Bollinger Pullback · M15</option><option value="asian">Asian Breakout · M15</option><option value="ai">AI Playbook · H1</option></select></label><label for="researchForwardBalance">Frozen initial capital<input id="researchForwardBalance" type="number" min="0.01" step="any" value="10000"></label></div>
+          <div class="form-row"><label for="researchForwardLatency">Latency (seconds)<input id="researchForwardLatency" type="number" min="0" step="1" value="0"></label><label for="researchForwardHorizon">Horizon (seconds)<input id="researchForwardHorizon" type="number" min="300" max="86400" step="1" value="900"></label></div>
+          <div class="form-row research-calendar"><label for="researchForwardBefore">Calendar before (minutes)<input id="researchForwardBefore" type="number" min="0" max="1440" step="1" value="0"></label><label for="researchForwardAfter">Calendar after (minutes)<input id="researchForwardAfter" type="number" min="0" max="1440" step="1" value="0"></label></div>
+          <label for="researchForwardBudget">จำนวน decision สูงสุดต่อ session<input id="researchForwardBudget" type="number" min="1" max="20" step="1" value="20"></label>
+          <label class="research-check"><input id="researchForwardEvidence" type="checkbox"> ใช้ news/calendar evidence จาก dataset ที่เลือก</label>
+          <div class="form-row"><label for="researchForwardProvider">Provider<select id="researchForwardProvider"><option value="disabled">Disabled · ใช้ rules/calendar</option><option value="openai">OpenAI</option><option value="gemini">Gemini</option></select></label><label for="researchForwardModel">Model<input id="researchForwardModel" type="text" autocomplete="off" placeholder="ระบุ model ที่ตั้งค่าไว้"></label></div>
+          <label for="researchForwardKey">API key<input id="researchForwardKey" type="password" autocomplete="off" spellcheck="false" placeholder="กรอกเฉพาะเมื่อเลือก provider"></label>
+          <p class="caption">เริ่มแล้วระบบรอแท่งใหม่ก่อนตัดสินใจ; provider ใช้ได้ไม่เกิน 2 calls ต่อแท่งใหม่. ผลเป็น virtual decision แยกตามสัญญาณ ไม่ใช่ broker fill. หยุดแล้วระบบอาจติดตามผลของรายการที่รับไว้จนครบ horizon.</p>
+          <div class="research-actions"><button id="researchForwardStart" class="button primary" type="submit">เริ่ม forward shadow</button><button id="researchForwardStop" class="button secondary" type="button" disabled>หยุดการตัดสินใจใหม่</button><button id="researchForwardRefresh" class="button secondary" type="button">รีเฟรชสถานะ</button></div>
+        </form>
+        <p id="researchForwardStatus" class="research-status" role="status" aria-live="polite">Forward shadow ยังไม่เริ่ม</p>
+        <div id="researchForwardDetails" class="research-result"><p class="empty">ผลการติดตามจะแสดงเมื่อเริ่มงาน</p></div>
+        <div class="research-downloads"><button id="researchForwardDownloadResult" type="button" class="button secondary" disabled>ดาวน์โหลด forward result</button><button id="researchForwardDownloadDataset" type="button" class="button secondary" disabled>ดาวน์โหลด forward dataset</button></div>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><div><h2>งานใน session นี้</h2><p>ดาวน์โหลดผลลัพธ์เพื่อเก็บไว้นอก session</p></div><button id="researchRefresh" type="button" class="text-button">รีเฟรช</button></div>
+        <div id="researchJobs" class="table-wrap"><div class="empty">ยังไม่มีงานวิจัย</div></div>
+        <div id="researchResult" class="research-result" aria-live="polite"><p class="empty">เลือกงานที่เสร็จแล้วเพื่อดูผล</p></div>
+        <div class="research-downloads"><button id="researchDownloadResult" type="button" class="button secondary" disabled>ดาวน์โหลดผล JSON</button><button id="researchDownloadTrace" type="button" class="button secondary" disabled>ดาวน์โหลด Replay trace</button></div>
+      </article>
+    </section>
     <footer>TRADE SAM WHERE <span>Paper / MT5 Demo · Local workspace · <span id="lastUpdate">—</span></span></footer>
   </div>
 </main>
 <dialog id="closeDialog"><h2>ปิด Position ที่ราคาตลาด</h2><p id="closeDetails"></p><p class="caption">กำไร/ขาดทุนที่ได้รับจริงอาจต่างจากที่แสดงตามราคาและค่าธรรมเนียม หลังปิดระบบ Auto จะรอสัญญาณจากแท่งใหม่</p><div class="close-dialog-actions"><button id="closeCancel" class="button secondary" type="button">ยกเลิก</button><button id="closeConfirm" class="button danger" type="button">ยืนยันปิด Position</button></div></dialog>
 <script src="/static/levels.js" defer></script>
+<script src="/static/research.js" defer></script>
 <script src="/static/app.js" defer></script>
 </body></html>

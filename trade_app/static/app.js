@@ -15,7 +15,7 @@ let closingPosition=null,closeRequestId=null;
 const names={smc:'SMC Liquidity Sweep + BOS',supply:'Supply / Demand Retest',ema:'EMA Trend Pullback',bollinger:'Bollinger Bands Pullback',asian:'Asian Range Breakout',ai:'AI Playbook'};
 const executionLabels={WAIT:'รอเงื่อนไข',READY:'รอตรวจ Risk',HOLDING:'ถือ Position/Pending',DISABLED:'ปิดกลยุทธ์',PAUSED:'Monitor หยุด',WAIT_NEW_BAR:'รอแท่งใหม่',BLOCKED:'บล็อก',RISK_BLOCKED:'Risk บล็อก',EVALUATED:'ประเมินแท่งนี้แล้ว',SENT:'ส่งแล้ว',REJECTED:'Broker ปฏิเสธ'};
 function strategyName(magic){const key=Object.keys(names).find((key,i)=>26001+i===magic);return state.settings.magic_names[String(magic)]||(key?names[key]:[0,26000].includes(magic)?'Manual':`EA #${magic}`);}
-const headings={dashboard:['Overview','ภาพรวมพอร์ต','ติดตามบัญชี ผลการเทรด และความเสี่ยงแบบเรียลไทม์'],terminal:['Trading Terminal','Trading Terminal','วางแผน XAUUSD ตรวจความเสี่ยง แล้วส่งคำสั่ง Demo'],journal:['Trading Journal','บันทึกการเทรด','ติดตามทุก Deal แยกกลยุทธ์และ EA พร้อมส่งออกข้อมูล'],analytics:['AI & Analytics','กลยุทธ์และการวิเคราะห์','สแกนโอกาสและดูประสิทธิภาพจากผลการเทรดจริงในบัญชี'],risk:['Risk Management','ควบคุมความเสี่ยง','กำหนดขอบเขตของระบบและหยุดคำสั่งใหม่ด้วย Kill Switch']};
+const headings={dashboard:['Overview','ภาพรวมพอร์ต','ติดตามบัญชี ผลการเทรด และความเสี่ยงแบบเรียลไทม์'],terminal:['Trading Terminal','Trading Terminal','วางแผน XAUUSD ตรวจความเสี่ยง แล้วส่งคำสั่ง Demo'],journal:['Trading Journal','บันทึกการเทรด','ติดตามทุก Deal แยกกลยุทธ์และ EA พร้อมส่งออกข้อมูล'],analytics:['AI & Analytics','กลยุทธ์และการวิเคราะห์','สแกนโอกาสและดูประสิทธิภาพจากผลการเทรดจริงในบัญชี'],risk:['Risk Management','ควบคุมความเสี่ยง','กำหนดขอบเขตของระบบและหยุดคำสั่งใหม่ด้วย Kill Switch'],research:['Research','Research workspace','นำเข้าข้อมูลย้อนหลังและตรวจผลจำลองใน session นี้']};
 
 function notice(message, error=false){
   const el=$('notice'); el.textContent=message; el.classList.add('visible'); el.style.color=error?'var(--red)':'var(--gold)';
@@ -64,6 +64,7 @@ function render(){
   if(page==='journal')renderJournal();
   if(page==='analytics')renderAnalytics();
   if(page==='risk')renderRisk();
+  if(page==='research')window.renderResearch?.(state);
   if(kill || Date.now()-previewAt>30000)$('sendOrder').disabled=true;
 }
 $('curveMode').onchange=()=>{if(state?.connected)renderDashboard();};

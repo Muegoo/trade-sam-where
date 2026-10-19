@@ -33,6 +33,10 @@ Open **http://127.0.0.1:8000**. The app stores its local state under `data/`, wh
 
 All paper prices, balances and results are synthetic. Strategy output is experimental; the project does not establish live trading profitability.
 
+For offline, file-based dataset validation, point-in-time snapshots, historical replay, calendar gating, shadow proposal validation, and replay traces, see the [research CLI guide](docs/research.md). These tools do not connect to MT5 or external providers.
+
+The local Research workspace also supports session-only MT5 historical collection, paired walk-forward comparison, and forward shadow observation. Collection requires MT5 Demo history; forward shadow can run in Simulation or MT5 Demo and never submits orders. See the [Research API and UI guide](docs/research.md) for explicit cost inputs, provider limits, and data/session boundaries.
+
 | Terminal | Mobile |
 |---|---|
 | ![Paper terminal](docs/images/terminal.png) | ![Responsive paper dashboard](docs/images/mobile.png) |
@@ -88,5 +92,6 @@ The server is intended for **local use**. It binds to loopback and uses local-ho
 - [Thai usage guide and strategy/risk details](docs/dashboard.md)
 - [Original Thai walkthrough, updated to the new name](README.th.md)
 - [Architecture and verification notes](docs/portfolio.md)
+- [Offline research CLI](docs/research.md)
 
 Screenshots in this repository are from the paper demo. Local databases, CSV exports, credentials and runtime logs are excluded. No project-wide license has been selected yet.

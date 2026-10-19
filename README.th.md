@@ -28,6 +28,10 @@ py -3.12 -m venv .venv
 
 อ่าน [รายละเอียดฟีเจอร์ กติกากลยุทธ์ Risk และวิธีทดสอบ](docs/dashboard.md)
 
+เครื่องมือวิจัยแบบ offline สำหรับตรวจ dataset, ทำ point-in-time snapshot, replay, กรองข่าวปฏิทิน และตรวจ proposal ใน shadow mode อ่านได้ที่ [คู่มือ Research CLI](docs/research.md) เครื่องมือนี้ไม่เชื่อม MT5 หรือ provider ภายนอก
+
+Research workspace ใน Dashboard เพิ่มการเก็บข้อมูลย้อนหลังจาก MT5 Demo, การเปรียบเทียบแบบ walk-forward และ forward shadow ที่เก็บผลไว้ใน session; forward shadow ใช้ได้ทั้ง Simulation และ MT5 Demo โดยไม่ส่งคำสั่งซื้อขาย ดู [คู่มือ Research API และ UI](docs/research.md) สำหรับต้นทุนที่ต้องกรอก ขอบเขต provider และอายุข้อมูล
+
 ## สคริปต์แจ้งสัญญาณเดิม
 
 สคริปต์ `gold_demo_alert.py` อ่านแท่ง H1 ที่ปิดแล้วของ XAU/USD จาก MT5 และใช้โมเดล logistic regression เรียนรู้ความสัมพันธ์ของราคาในอดีต เพื่อแสดง `WATCH_BUY`, `WATCH_SELL` หรือ `WAIT` ระหว่าง **19:00–22:00 น. วันจันทร์–ศุกร์ เวลาไทย** สคริปต์นี้ **ไม่มีโค้ดส่งออร์เดอร์** และจะหยุดหาก MT5 ไม่ได้เชื่อมต่อบัญชีเดโม ส่วน Dashboard สแกนตลอดเวลาที่เปิดแอปและส่งคำสั่งได้เมื่อผู้ใช้กดปุ่ม
