@@ -127,7 +127,7 @@ function renderMonitor(){
   $('monitorMessage').textContent=m?.message||'รีสตาร์ทเซิร์ฟเวอร์เพื่อโหลด Auto Monitor เวอร์ชันใหม่';
   $('monitorCloseExpiry').disabled=!!(m?.enabled||m?.close_on_expiry);
   if(m?.enabled||m?.close_on_expiry)$('monitorCloseExpiry').checked=m.close_on_expiry;
-  $('monitorExpiry').textContent=m?.enabled||m?.close_on_expiry?`Session สิ้นสุด ${localTime(m.expires)} · สูงสุด ${m.max_positions} ไม้รวม Position/Pending ทั้งบัญชี · ${m.close_on_expiry?'ครบเวลาส่งปิด Position ของแอป':'ครบเวลาหยุดเปิดไม้ใหม่'}`:'';
+  $('monitorExpiry').textContent=m?.enabled||m?.close_on_expiry?`Session สิ้นสุด ${localTime(m.expires)} · สูงสุด ${m.max_positions} ไม้รวม Position/Pending ทั้งบัญชี${m.max_trades?` · เปิดแล้ว ${m.trades_used}/${m.max_trades} ไม้รวมทั้ง Session`:` · เปิดแล้ว ${m.trades_used||0} ไม้ · ไม่จำกัดจำนวนไม้รวม`} · ${m.close_on_expiry?'ครบเวลาส่งปิด Position ของแอป':'ครบเวลาหยุดเปิดไม้ใหม่'}`:'';
   $('monitorEvents').innerHTML=table(['เวลา','เหตุการณ์','กลยุทธ์','ผล'],(m?.events||[]).map(e=>[esc(localTime(e.time)),esc(e.message),esc(names[e.strategy]||'—'),esc(e.result?`#${e.result.order} · ${e.result.message}`:e.lot?`${number(e.lot)} Lot`:'—')]));
   $('strategyExecution').innerHTML=table(['Strategy','สัญญาณ','การส่งคำสั่ง','ถืออยู่','ตัวอย่างที่เปิด','เหตุผล'],(m?.strategy_status||[]).map(s=>[esc(s.name),badge(s.signal),esc(executionLabels[s.status]||s.status),`${s.open_count} / 1`,s.samples,`<div class="strategy-reason">${esc(s.reason)}</div>`]));
 }

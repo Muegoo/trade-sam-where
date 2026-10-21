@@ -1,5 +1,9 @@
 # Offline research CLI
 
+Local API `evaluate` and `compare` job options accept `require_quote_coverage` (boolean, default false). When enabled, only complete test intervals with quote boundary and internal gaps of at most 60 seconds are evaluated. Training/validation warmup bars remain available, but folds outside the recorded quote range are listed in `coverage_exclusions` rather than replayed using a later first quote. No eligible intervals return `insufficient_quote_coverage`. Comparison reports planned, evaluated, and excluded folds; exclusion never implies zero P&L. The Demo session runner enables this option and uses four-bar M15 test blocks for its bounded archive. Coverage is a data quality check, not evidence of statistical significance or profitability.
+
+The session runner additionally records observed quotes and completed bars while Auto runs. Newly observed bars use their observation time for `available_at`; historical warmup uses the collector's documented historical availability assumption. `research-session-dataset.json` preserves explicit cost assumptions and quote gaps. After deadline closing, optional `evaluate_session` runs coverage-checked evaluation and archives its output before shutdown.
+
 `python3 -m trade_app.research` validates archived datasets, exports causal snapshots, replays explicit proposals, and checks advisory proposals in shadow mode. It reads local JSON only. Every input remains unchanged, JSON output rejects non-finite numbers, and file outputs are created exclusively so an existing file is never overwritten. Inputs must be regular UTF-8 JSON files no larger than 100 MiB. Duplicate object keys are rejected.
 
 ## Commands

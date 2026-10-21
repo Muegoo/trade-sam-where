@@ -261,8 +261,8 @@ def run_replay(dataset, proposals, settings=None, initial_balance=10000.0,
             p["risk"]["price_current"] = mark
             p["risk"]["profit"] = broker.profit(p["side"], instrument["symbol"], p["volume"], p["entry"], mark)
         if prev_quote_time is not None and positions:
-            start = datetime.fromtimestamp(prev_quote_time, UTC)
-            end = datetime.fromtimestamp(now, UTC)
+            start = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(seconds=prev_quote_time)
+            end = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(seconds=now)
             rollover_day = start.date()
             while rollover_day <= end.date():
                 if rollover_day.weekday() in costs["rollover_weekdays"]:

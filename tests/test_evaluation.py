@@ -40,6 +40,33 @@ def dataset(count=110, rising=False):
 
 
 class EvaluationTests(unittest.TestCase):
+    def covered_dataset(self, gap=False):
+        payload=dataset().to_dict()
+        start=payload['bars']['M15'][104]['available_at']
+        end=payload['bars']['M15'][108]['available_at']
+        payload['quotes']=[{'time':stamp,'bid':100,'ask':100.1} for stamp in range(start,end+1,30)
+                           if not gap or not start+100<stamp<start+500]
+        return load_dataset(payload)
+
+    def test_strict_coverage_uses_only_archived_complete_windows(self):
+        result=self.evaluate(self.covered_dataset(),require_quote_coverage=True)['strategies']['ema']
+        self.assertEqual(result['planned_folds'],4)
+        self.assertEqual(result['complete_folds'],2)
+        self.assertEqual(len(result['coverage_exclusions']),2)
+        self.assertTrue(all(f['quote_coverage']['covered'] for f in result['folds']))
+
+    def test_quote_gap_excludes_affected_fold_instead_of_trading_across_missing_data(self):
+        result=self.evaluate(self.covered_dataset(gap=True),require_quote_coverage=True)['strategies']['ema']
+        self.assertEqual(result['complete_folds'],1)
+        self.assertEqual(len(result['coverage_exclusions']),3)
+
+    def test_no_covered_windows_is_explicitly_unavailable(self):
+        payload=self.covered_dataset().to_dict()
+        payload['quotes']=[{'time':BASE,'bid':100,'ask':100.1}]
+        result=self.evaluate(load_dataset(payload),require_quote_coverage=True)
+        self.assertEqual(result['status'],'insufficient_quote_coverage')
+        self.assertEqual(result['strategies']['ema']['complete_folds'],0)
+
     def evaluate(self, ds, strategy="ema", **kwargs):
         return evaluate_dataset(ds, strategies=[strategy], train_bars=80,
                                 validation_bars=20, test_bars=2, purge_bars=1,

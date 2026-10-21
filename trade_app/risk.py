@@ -1,15 +1,19 @@
 import math
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_FLOOR
 from .analytics import BANGKOK
 from .broker import BrokerError
 
 
 def day_net(deals, now=None):
-    today = datetime.fromtimestamp(time.time() if now is None else now, BANGKOK).date()
+    # Windows' CRT rejects timestamps beyond year 3000; use datetime arithmetic.
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    def local_day(stamp):
+        return (epoch + timedelta(seconds=stamp)).astimezone(BANGKOK).date()
+    today = local_day(time.time() if now is None else now)
     return sum(sum(d.get(k, 0) for k in ("profit", "commission", "swap", "fee"))
-               for d in deals if d["type"] in (0, 1) and datetime.fromtimestamp(d["time"], BANGKOK).date() == today)
+               for d in deals if d["type"] in (0, 1) and local_day(d["time"]) == today)
 
 
 def floor_lot(value, step):
@@ -35,7 +39,7 @@ def preview(order, snap, settings, broker, now=None):
     if not a["trade_allowed"]:
         errors.append("MT5 ไม่อนุญาต Algo Trading / Python Trading")
     checked_at = time.time() if now is None else now
-    if checked_at - tick["time"] > 180 or tick["bid"] <= 0 or tick["ask"] <= tick["bid"]:
+    if not -5 <= checked_at - tick["time"] <= 180 or tick["bid"] <= 0 or tick["ask"] <= tick["bid"]:
         errors.append("ราคาเก่าหรือไม่ถูกต้อง; รอ tick ล่าสุด")
     if a["equity"] <= 0:
         errors.append("Equity ต้องมากกว่า 0")

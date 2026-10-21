@@ -77,6 +77,7 @@ class MonitorStart(BaseModel):
     hours: int = Field(default=8, ge=1, le=24)
     close_on_expiry: bool = True
     expires_at: int | None = Field(default=None, gt=0)
+    max_trades: int | None = Field(default=None, ge=1, le=100, strict=True)
 
 
 class ClosePosition(BaseModel):
@@ -88,9 +89,9 @@ class ClosePosition(BaseModel):
     side: Literal[0, 1]
 
 
-def create_app(mode="simulation", symbol="XAUUSD", db_path=None):
+def create_app(mode="simulation", symbol="XAUUSD", db_path=None, mt5_time_offset_seconds=0):
     store = Store(db_path or ROOT.parent / "data" / "trade.db")
-    broker = SimulationBroker(symbol, store) if mode == "simulation" else MT5Broker(symbol)
+    broker = SimulationBroker(symbol, store) if mode == "simulation" else MT5Broker(symbol, mt5_time_offset_seconds)
     monitor = Monitor(store, broker)
     lock = threading.RLock()
     token = secrets.token_urlsafe(32)
@@ -269,7 +270,7 @@ def create_app(mode="simulation", symbol="XAUUSD", db_path=None):
                     raise BrokerError("บัญชีเปลี่ยน กรุณาโหลดข้อมูลใหม่")
                 if monitor.enabled:
                     raise BrokerError("Monitor เปิดอยู่แล้ว หยุดก่อนเริ่ม Session ใหม่")
-                monitor.start(snap, state["signals"], store.settings(), body.hours, body.close_on_expiry, body.expires_at)
+                monitor.start(snap, state["signals"], store.settings(), body.hours, body.close_on_expiry, body.expires_at, body.max_trades)
                 return monitor.status()
             except BrokerError as exc:
                 raise HTTPException(409, str(exc)) from exc
@@ -434,9 +435,10 @@ def main():
     parser.add_argument("--mode", choices=["simulation", "mt5"], default="simulation")
     parser.add_argument("--symbol", default=os.getenv("MT5_GOLD_SYMBOL", "XAUUSD"))
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--mt5-time-offset-seconds", type=int, default=0)
     args = parser.parse_args()
     import uvicorn
-    uvicorn.run(create_app(args.mode, args.symbol), host="127.0.0.1", port=args.port)
+    uvicorn.run(create_app(args.mode, args.symbol, mt5_time_offset_seconds=args.mt5_time_offset_seconds), host="127.0.0.1", port=args.port)
 
 
 if __name__ == "__main__":

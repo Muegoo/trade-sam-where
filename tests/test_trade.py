@@ -48,6 +48,8 @@ class RiskTests(unittest.TestCase):
         snap=copy.deepcopy(self.snap);snap["tick"]["time"] = int(time.time())-500
         self.assertFalse(self.result(snap=snap)["allowed"])
         self.assertFalse(self.result(settings=DEFAULTS|{"max_spread": 1})["allowed"])
+        snap=copy.deepcopy(self.snap);snap['tick']['time']=int(time.time())+10800
+        self.assertFalse(self.result(snap=snap)['allowed'])
 
     def test_lot_steps_max_and_risk(self):
         for lot in (.025, 1):

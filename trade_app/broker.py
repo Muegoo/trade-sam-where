@@ -51,34 +51,77 @@ def validate_linear_research_model(mt5, symbol, info, tick, currency):
 class MT5Broker:
     mode = "mt5"
 
-    def __init__(self, symbol):
+    def __init__(self, symbol, time_offset_seconds=0):
+        if type(time_offset_seconds) is not int or abs(time_offset_seconds) > 14 * 3600:
+            raise ValueError("MT5 timestamp offset must be integer seconds within +/-14 hours")
         import MetaTrader5
         self.mt5 = MetaTrader5
         self.symbol = symbol
+        self.time_offset_seconds = time_offset_seconds
+        self._initialized = False
+        self._retry_at = 0
+        self._retry_delay = 3
+        self._connection_error = None
+
+    def connection_failed(self, message):
+        # Discard the IPC handle after terminal restart; never retry broker writes.
+        self._initialized = False
+        try:
+            self.mt5.shutdown()
+        except Exception:
+            pass  # Preserve the original connection error if the stale handle cannot close.
+        finally:
+            delay = getattr(self, "_retry_delay", 3)
+            self._retry_at = time.monotonic() + delay
+            self._retry_delay = min(30, delay * 2)
+            self._connection_error = message
+        raise BrokerError(message)
+
+    def connect(self):
+        if getattr(self, "_initialized", False):
+            return
+        if time.monotonic() < getattr(self, "_retry_at", 0):
+            raise BrokerError(self._connection_error + " · รอเชื่อมต่อใหม่")
+        if not self.mt5.initialize(timeout=10000):
+            self.connection_failed(f"เชื่อม MT5 ไม่สำเร็จ: {self.mt5.last_error()}")
+        self._initialized = True
+
+    def utc_record(self, record):
+        """Normalize an explicitly configured broker clock; never infer an offset."""
+        offset = getattr(self, "time_offset_seconds", 0)
+        seconds = {"time", "time_update", "time_setup", "time_done", "time_expiration"}
+        millis = {"time_msc", "time_update_msc", "time_setup_msc", "time_done_msc"}
+        return {key: value - offset * (1000 if key in millis else 1)
+                if key in seconds | millis and value > 0 else value
+                for key, value in record.items()}
 
     def snapshot(self):
         m = self.mt5
-        if not m.initialize(timeout=10000):
-            raise BrokerError(f"เชื่อม MT5 ไม่สำเร็จ: {m.last_error()}")
+        self.connect()
         account, terminal = m.account_info(), m.terminal_info()
         if account is None or terminal is None or not terminal.connected:
-            raise BrokerError("กรุณาเปิด MT5 และล็อกอินบัญชี Demo")
+            self.connection_failed(f"MT5 ขาดการเชื่อมต่อ: {m.last_error()} · กรุณาเปิด MT5 และล็อกอินบัญชี Demo")
         if not m.symbol_select(self.symbol, True):
             raise BrokerError(f"ไม่พบ {self.symbol}; ตรวจชื่อใน Market Watch")
         info, tick = m.symbol_info(self.symbol), m.symbol_info_tick(self.symbol)
         positions, orders = m.positions_get(), m.orders_get()
-        deals = m.history_deals_get(datetime(2000, 1, 1, tzinfo=UTC), datetime.now(UTC))
+        shift = timedelta(seconds=getattr(self, "time_offset_seconds", 0))
+        deals = m.history_deals_get(datetime(2000, 1, 1, tzinfo=UTC) + shift, datetime.now(UTC) + shift)
         bars = m.copy_rates_from_pos(self.symbol, m.TIMEFRAME_M15, 0, 600)
         h1 = m.copy_rates_from_pos(self.symbol, m.TIMEFRAME_H1, 1, 1600)
         if any(x is None for x in (info, tick, positions, orders, deals, bars, h1)):
-            raise BrokerError(f"ข้อมูล MT5 ไม่ครบ: {m.last_error()}")
+            self.connection_failed(f"ข้อมูล MT5 ไม่ครบ: {m.last_error()}")
+        self._retry_delay, self._retry_at, self._connection_error = 3, 0, None
         a = account._asdict()
         a["is_demo"] = account.trade_mode == m.ACCOUNT_TRADE_MODE_DEMO
         a["trade_allowed"] = bool(a.get("trade_allowed") and a.get("trade_expert") and terminal.trade_allowed and not terminal.tradeapi_disabled)
-        return {"account": a, "info": info._asdict(), "tick": tick._asdict(),
-                "positions": [p._asdict() for p in positions], "orders": [o._asdict() for o in orders],
-                "deals": [d._asdict() for d in deals],
-                "bars": [{k: (int(b[k]) if k in ("time", "tick_volume", "spread", "real_volume") else float(b[k])) for k in bars.dtype.names} for b in bars],
+        h1 = h1.copy()
+        h1["time"] -= getattr(self, "time_offset_seconds", 0)
+        return {"account": a, "info": info._asdict(), "tick": self.utc_record(tick._asdict()),
+                "positions": [self.utc_record(p._asdict()) for p in positions],
+                "orders": [self.utc_record(o._asdict()) for o in orders],
+                "deals": [self.utc_record(d._asdict()) for d in deals],
+                "bars": [self.utc_record({k: (int(b[k]) if k in ("time", "tick_volume", "spread", "real_volume") else float(b[k])) for k in bars.dtype.names}) for b in bars],
                 "h1": h1, "scope": f"mt5:{account.server}:{account.login}"}
 
     def validate_research_instrument(self, info, tick, currency):
@@ -110,10 +153,11 @@ class MT5Broker:
         self.validate_research_instrument(info, tick, currency)
 
         ticks = []
+        shift = timedelta(seconds=getattr(self, "time_offset_seconds", 0))
         cursor = start
         while cursor < end:
             chunk_end = min(cursor + timedelta(hours=1), end)
-            batch = m.copy_ticks_range(self.symbol, cursor, chunk_end, m.COPY_TICKS_INFO)
+            batch = m.copy_ticks_range(self.symbol, cursor + shift, chunk_end + shift, m.COPY_TICKS_INFO)
             if batch is None:
                 raise BrokerError(f"MT5 tick history unavailable: {m.last_error()}")
             if len(batch) > 500_000 - len(ticks):
@@ -126,17 +170,18 @@ class MT5Broker:
         for frame, timeframe, warmup, seconds in (
                 ("M15", m.TIMEFRAME_M15, 1200, 900), ("H1", m.TIMEFRAME_H1, 1200, 3600)):
             bar_start = max(datetime(1970, 1, 1, tzinfo=UTC), start - timedelta(seconds=warmup * seconds))
-            rows = m.copy_rates_range(self.symbol, timeframe, bar_start, end)
+            rows = m.copy_rates_range(self.symbol, timeframe, bar_start + shift, end + shift)
             if rows is None:
                 raise BrokerError(f"MT5 {frame} history unavailable: {m.last_error()}")
             if len(rows) > 20_000:
                 raise BrokerError(f"MT5 {frame} history exceeds 20000 bars")
-            rates[frame] = [{key: (int(row[key]) if key in ("time", "tick_volume", "spread", "real_volume") else float(row[key]))
-                             for key in rows.dtype.names} for row in rows]
+            rates[frame] = [self.utc_record({key: (int(row[key]) if key in ("time", "tick_volume", "spread", "real_volume") else float(row[key]))
+                             for key in rows.dtype.names}) for row in rows]
         return {"symbol": self.symbol, "currency": currency, "info": info._asdict(),
-                "ticks": [{key: int(row[key]) if key in ("time", "time_msc", "flags") else float(row[key])
-                           for key in row.dtype.names} for row in ticks],
+                "ticks": [self.utc_record({key: int(row[key]) if key in ("time", "time_msc", "flags") else float(row[key])
+                           for key in row.dtype.names}) for row in ticks],
                 "bars": rates, "requested_range": {"start": int(start.timestamp()), "end": int(end.timestamp())},
+                "timestamp_offset_seconds": getattr(self, "time_offset_seconds", 0),
                 "fetched_at": int(now.timestamp())}
 
     def profit(self, side, symbol, lot, entry, exit_price):
@@ -193,7 +238,8 @@ class MT5Broker:
     def close_position(self, position, snapshot):
         m = self.mt5
         info, tick = m.symbol_info(position["symbol"]), m.symbol_info_tick(position["symbol"])
-        if info is None or tick is None or time.time()-tick.time > 180:
+        age = time.time() - (tick.time - getattr(self, "time_offset_seconds", 0)) if tick else float("inf")
+        if info is None or tick is None or not -5 <= age <= 180:
             raise BrokerRejected("ไม่พบราคาล่าสุดสำหรับปิด Position")
         if info.filling_mode & 1:
             filling = m.ORDER_FILLING_FOK
@@ -218,6 +264,7 @@ class MT5Broker:
 
     def close(self):
         self.mt5.shutdown()
+        self._initialized = False
 
 
 class SimulationBroker:

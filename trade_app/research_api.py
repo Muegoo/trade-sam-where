@@ -60,6 +60,12 @@ def _int(value, name, minimum=0, maximum=None):
     return value
 
 
+def _boolean(value, name):
+    if type(value) is not bool:
+        _bad(422, f"Invalid {name}")
+    return value
+
+
 def _number(value, name, minimum=None, maximum=None):
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         _bad(422, f"Invalid {name}")
@@ -527,7 +533,7 @@ class ResearchWorkspace:
                     result = run_replay_experiment(ds, proposals, **config)
                     return result, build_replay_trace(ds, result)
             elif kind == "evaluate":
-                allowed = {"settings", "strategies", "train_bars", "validation_bars", "test_bars", "purge_bars", "embargo_bars", "initial_balance", "latency_seconds", "calendar_before_minutes", "calendar_after_minutes"}
+                allowed = {"settings", "strategies", "train_bars", "validation_bars", "test_bars", "purge_bars", "embargo_bars", "initial_balance", "latency_seconds", "calendar_before_minutes", "calendar_after_minutes", "require_quote_coverage"}
                 if set(options) - allowed:
                     _bad(422, "Unsupported evaluation option")
                 config = {"settings": options.get("settings", settings),
@@ -543,6 +549,7 @@ class ResearchWorkspace:
                           "calendar_after_minutes": _int(options.get("calendar_after_minutes", 0), "calendar_after_minutes", 0, 1440)}
                 if not isinstance(config["settings"], dict):
                     _bad(422, "Invalid evaluation settings")
+                config["require_quote_coverage"] = _boolean(options.get("require_quote_coverage", False), "require_quote_coverage")
                 if config["initial_balance"] <= 0:
                     _bad(422, "Invalid initial_balance")
                 if config["strategies"] is not None and (not isinstance(config["strategies"], list) or any(not isinstance(x, str) for x in config["strategies"])):
@@ -577,7 +584,7 @@ class ResearchWorkspace:
                 else:
                     allowed = {"strategy", "settings", "train_bars", "validation_bars", "test_bars",
                         "purge_bars", "embargo_bars", "initial_balance", "latency_seconds",
-                        "calendar_before_minutes", "calendar_after_minutes", "max_llm_decisions"}
+                        "calendar_before_minutes", "calendar_after_minutes", "max_llm_decisions", "require_quote_coverage"}
                     if set(options) - allowed:
                         _bad(422, "Unsupported comparison option")
                     strategy = options.get("strategy")
@@ -597,6 +604,7 @@ class ResearchWorkspace:
                         "provider": provider, "model": model, "api_key": api_key}
                     if not isinstance(config["settings"], dict) or config["initial_balance"] <= 0:
                         _bad(422, "Invalid comparison settings")
+                    config["require_quote_coverage"] = _boolean(options.get("require_quote_coverage", False), "require_quote_coverage")
                     def work(ds):
                         return compare_strategy(ds, **config), None
             return self._submit(kind, digest, dataset, work)

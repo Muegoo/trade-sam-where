@@ -19,6 +19,8 @@ class Monitor:
         self.quote = None
         self.quote_changed = time.monotonic()
         saved = store.monitor_session()
+        self.max_trades = saved.get("max_trades")
+        self.trades_used = saved.get("trades_used", 0)
         self.close_on_expiry = bool(saved.get("close_on_expiry") and saved.get("symbol") == broker.symbol)
         self.max_positions = store.settings()["max_orders"]
         self.close_retry_at = {}
@@ -29,7 +31,8 @@ class Monitor:
 
     def persist_session(self):
         self.store.save_monitor_session({"scope": self.scope, "symbol": self.broker.symbol,
-            "expires": self.expires, "close_on_expiry": self.close_on_expiry})
+            "expires": self.expires, "close_on_expiry": self.close_on_expiry,
+            "max_trades": self.max_trades, "trades_used": self.trades_used})
 
     def event(self, message, **extra):
         self.message = message
@@ -40,6 +43,7 @@ class Monitor:
                 "message": self.message, "events": self.store.monitor_events(scope or self.scope or ""),
                 "single_position": self.max_positions == 1, "max_positions": self.max_positions,
                 "close_on_expiry": self.close_on_expiry, "per_strategy_limit": 1,
+                "max_trades": self.max_trades, "trades_used": self.trades_used,
                 "strategy_status": list(self.strategy_status.values())}
 
     def suppress(self, signals):
@@ -78,7 +82,9 @@ class Monitor:
             if row["status"] == "READY":
                 row.update(status="BLOCKED", reason=reason)
 
-    def start(self, snap, signals, settings, hours=8, close_on_expiry=True, expires_at=None):
+    def start(self, snap, signals, settings, hours=8, close_on_expiry=True, expires_at=None, max_trades=None):
+        if max_trades is not None and (type(max_trades) is not int or not 1 <= max_trades <= 100):
+            raise BrokerError("จำนวนไม้รวมต่อ Session ต้องอยู่ระหว่าง 1–100")
         if not snap["account"]["is_demo"]:
             raise BrokerError("Monitor ส่งคำสั่งได้เฉพาะ Demo")
         if settings["kill_switch"] or not snap["account"]["trade_allowed"]:
@@ -97,6 +103,7 @@ class Monitor:
         self.quote_changed = time.monotonic()
         self.expires = int(expires_at if expires_at is not None else time.time() + hours * 3600)
         self.close_on_expiry = close_on_expiry
+        self.max_trades, self.trades_used = max_trades, 0
         self.max_positions = settings["max_orders"]
         self.persist_session()
         self.enabled = True
@@ -127,6 +134,10 @@ class Monitor:
             return False
         if settings["kill_switch"] or time.time() >= self.expires:
             self.stop("หยุด Monitor: Kill Switch เปิดอยู่หรือครบเวลา Session")
+            return False
+        if self.max_trades is not None and self.trades_used >= self.max_trades:
+            self.stop(f"ครบเพดานรวม {self.max_trades} ไม้ · หยุดเปิดไม้ใหม่ รอปิดเมื่อครบเวลา")
+            self.block_ready(self.message)
             return False
         current = {p["ticket"]:p for p in snap["positions"] if p["symbol"] == self.broker.symbol}
         removed = set(self.previous_positions) - set(current)
@@ -159,6 +170,7 @@ class Monitor:
         self.message = "รอสัญญาณเข้าเงื่อนไข · ดูเหตุผลแยกตามกลยุทธ์" if not candidates else "กำลังตรวจสัญญาณรายกลยุทธ์"
         for signal in candidates:
             row = self.strategy_status[signal["key"]]
+            reserved = False
             digest = hashlib.sha256(f"{self.scope}:{self.broker.symbol}:{signal['key']}:{signal['time']}".encode()).hexdigest()
             request_id = "auto-" + digest
             if self.store.request(self.scope, request_id):
@@ -172,10 +184,17 @@ class Monitor:
                     continue
                 # A durable claim BEFORE broker I/O protects against restart / lost responses.
                 self.store.save_request(self.scope, request_id, {"pending": True, "signal": signal["key"]})
+                # Reserve durably before broker I/O; uncertain outcomes consume a slot.
+                self.trades_used += 1
+                reserved = True
+                self.persist_session()
                 self.event("กำลังส่ง Auto Demo", strategy=signal["key"], side=proposal["side"],
                            lot=proposal["lot"], entry=proposal["entry"], sl=proposal["sl"], tp=proposal["tp"])
                 result = self.broker.send(proposal, snap)
                 self.store.save_request(self.scope, request_id, result)
+                if not result["ok"]:
+                    self.trades_used -= 1
+                    self.persist_session()
                 self.floors[signal["key"]] = signal["time"]  # Once per strategy/candle.
                 row.update(status="SENT" if result["ok"] else "REJECTED", reason=result.get("message", ""))
                 self.event("ส่ง Auto Demo แล้ว" if result["ok"] else "Broker ปฏิเสธ Auto Demo",
@@ -183,6 +202,9 @@ class Monitor:
                 return bool(result["ok"])
             except BrokerRejected as exc:
                 self.store.save_request(self.scope, request_id, {"ok": False, "message": str(exc)})
+                if reserved:
+                    self.trades_used -= 1
+                    self.persist_session()
                 self.floors[signal["key"]] = signal["time"]
                 self.event(f"Broker ปฏิเสธ Auto Demo ก่อนส่ง: {exc}", strategy=signal["key"])
                 row.update(status="REJECTED", reason=str(exc))

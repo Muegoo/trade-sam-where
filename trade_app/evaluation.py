@@ -103,6 +103,15 @@ def _folds(count, train_bars, validation_bars, test_bars, purge_bars, embargo_ba
     return out
 
 
+def quote_coverage(quotes, times, start, end, max_gap=60):
+    rows = quotes[bisect.bisect_left(times, start):bisect.bisect_left(times, end)]
+    gaps = ([rows[0]["time"] - start, end - rows[-1]["time"]] +
+            [right["time"] - left["time"] for left, right in zip(rows, rows[1:])]) if rows else []
+    return {"covered": bool(rows) and max(gaps) <= max_gap,
+            "quote_count": len(rows), "maximum_gap_seconds": max(gaps) if gaps else None,
+            "allowed_gap_seconds": max_gap, "start": start, "end": end}
+
+
 def _training_digest(rows, labels, strategy, bounds):
     return _hash({"strategy": strategy, "features": rows, "labels": labels,
                   "training_indices": bounds["train"],
@@ -190,7 +199,7 @@ def _model_for_fold(bars, decisions, frame_seconds, bounds, strategy, validation
 def evaluate_dataset(dataset, strategies=None, settings=None, train_bars=600,
                      validation_bars=250, test_bars=100, purge_bars=1,
                      embargo_bars=1, initial_balance=10000.0, latency_seconds=0,
-                     calendar_before_minutes=0, calendar_after_minutes=0):
+                     calendar_before_minutes=0, calendar_after_minutes=0, require_quote_coverage=False):
     """Evaluate causal, closed-bar strategy decisions against archived quotes."""
     if not hasattr(dataset, "to_dict") or not hasattr(dataset, "dataset_hash"):
         raise TypeError("dataset must be a loaded Dataset")
@@ -203,6 +212,8 @@ def evaluate_dataset(dataset, strategies=None, settings=None, train_bars=600,
     calendar_before_minutes = _integer(calendar_before_minutes, "calendar_before_minutes", 0, 1440)
     calendar_after_minutes = _integer(calendar_after_minutes, "calendar_after_minutes", 0, 1440)
     initial_balance = _finite(initial_balance, "initial_balance", positive=True)
+    if type(require_quote_coverage) is not bool:
+        raise ValueError("require_quote_coverage must be boolean")
     if strategies is None:
         strategies = list(STRATEGIES)
     if (not isinstance(strategies, (list, tuple)) or not strategies or
@@ -216,6 +227,7 @@ def evaluate_dataset(dataset, strategies=None, settings=None, train_bars=600,
               "purge_bars": purge_bars, "embargo_bars": embargo_bars,
               "initial_balance": initial_balance, "latency_seconds": latency_seconds,
               "calendar_before_minutes": calendar_before_minutes,
+              "require_quote_coverage": require_quote_coverage,
               "calendar_after_minutes": calendar_after_minutes,
               "fold_policy": "fixed-width rolling windows; test blocks non-overlapping",
               "model": "StandardScaler+LogisticRegression(max_iter=1000); train-only fit"}
@@ -250,6 +262,7 @@ def evaluate_dataset(dataset, strategies=None, settings=None, train_bars=600,
             continue
         decisions = [_decision(bar, seconds) for bar in bars]
         result_folds = []
+        coverage_exclusions = []
         for fold_index, bounds in enumerate(folds):
             test_start, test_end = bounds["test"]
             first_test_at = decisions[test_start]
@@ -257,6 +270,10 @@ def evaluate_dataset(dataset, strategies=None, settings=None, train_bars=600,
             next_test_at = decisions[test_end] if test_end < len(bars) else None
             quote_window_end = min(next_test_at if next_test_at is not None else MAX_TIMESTAMP,
                                    min(MAX_TIMESTAMP, last_test_at + seconds))
+            coverage = quote_coverage(quotes, quote_times, first_test_at, quote_window_end)
+            if require_quote_coverage and not coverage["covered"]:
+                coverage_exclusions.append({"fold": fold_index, "reason": "quote_coverage_incomplete", **coverage})
+                continue
             if strategy == "ai":
                 model_info, model, classify = _model_for_fold(
                     bars, decisions, seconds, bounds, strategy,
@@ -344,6 +361,7 @@ def evaluate_dataset(dataset, strategies=None, settings=None, train_bars=600,
                                  "quote_window": {"start_inclusive": first_test_at,
                                                   "end_exclusive": quote_window_end},
                                  "status": status, "training": model_info,
+                                 "quote_coverage": coverage,
                                  "predictions": predictions if strategy == "ai" else [],
                                  "prediction_metrics": prediction_metrics,
                                  "proposals": proposals, "exclusions": exclusions,
@@ -351,7 +369,8 @@ def evaluate_dataset(dataset, strategies=None, settings=None, train_bars=600,
         closed = [trade for fold in result_folds if fold["replay"] for trade in fold["replay"]["trades"]]
         net = sum(fold["replay"]["metrics"]["net_pnl"] for fold in result_folds if fold["replay"])
         pnl = [fold["replay"]["metrics"]["net_pnl"] for fold in result_folds if fold["replay"]]
-        outputs[strategy] = {"timeframe": frame, "status": "completed", "bars_available": len(bars),
+        outputs[strategy] = {"timeframe": frame, "status": "completed" if result_folds else "insufficient_quote_coverage", "bars_available": len(bars),
+                             "planned_folds": len(folds), "coverage_exclusions": coverage_exclusions,
                              "complete_folds": len(result_folds),
                              "incomplete_tail_bars": len(bars) - (folds[-1]["test"][1]),
                              "summary": {"net_pnl_sum": net, "closed_trades": len(closed),
@@ -372,7 +391,7 @@ def evaluate_dataset(dataset, strategies=None, settings=None, train_bars=600,
                               "validation": "AI model fits only train rows; validation gate uses selected directional signals and is frozen for test",
                               "historical_results": "simulation only; no profitability claim or automatic strategy ranking"},
               "parameters": config, "strategies": outputs}
-    if all(row["status"] == "insufficient_data" for row in outputs.values()):
-        result["status"] = "insufficient_data"
+    if all(row["status"] in ("insufficient_data", "insufficient_quote_coverage") for row in outputs.values()):
+        result["status"] = "insufficient_quote_coverage" if require_quote_coverage else "insufficient_data"
     _canonical(result)
     return result

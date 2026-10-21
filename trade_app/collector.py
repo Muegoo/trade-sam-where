@@ -154,6 +154,7 @@ def collect_mt5_dataset(raw_history, costs, margin_per_lot, *, gap_threshold_sec
         raise DatasetError("dataset: exceeds 8 MiB canonical limit")
     return {"dataset": dataset.to_dict(), "dataset_hash": dataset.dataset_hash,
             "collection": {"requested_range": {"start": start, "end": end}, "fetched_at": fetched_at,
+                           "timestamp_offset_seconds": raw_history.get("timestamp_offset_seconds", 0),
                            "raw_tick_count": len(raw_ticks), "invalid_quote_count": invalid,
                            "same_second_deduplicated_count": deduplicated, "sampled_quote_count": len(quotes),
                            "quote_gaps": _gaps(quotes, start, end, threshold), "bar_gaps": bar_gaps,

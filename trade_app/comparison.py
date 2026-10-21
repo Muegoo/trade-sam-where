@@ -72,7 +72,7 @@ def compare_strategy(dataset, strategy, settings=None, train_bars=600, validatio
                      initial_balance=10000.0, latency_seconds=0,
                      calendar_before_minutes=0, calendar_after_minutes=0,
                      provider="disabled", model=None, api_key=None,
-                     max_llm_decisions=10, client=None):
+                     max_llm_decisions=10, client=None, require_quote_coverage=False):
     """Compare four variants using identical causal folds and archived quotes."""
     from .advisor import AdvisorError, generate_advice
 
@@ -96,7 +96,8 @@ def compare_strategy(dataset, strategy, settings=None, train_bars=600, validatio
     evaluation = evaluate_dataset(dataset, strategies=[strategy], settings=settings,
         train_bars=train_bars, validation_bars=validation_bars, test_bars=test_bars,
         purge_bars=purge_bars, embargo_bars=embargo_bars, initial_balance=initial_balance,
-        latency_seconds=latency_seconds, calendar_before_minutes=0, calendar_after_minutes=0)
+        latency_seconds=latency_seconds, calendar_before_minutes=0, calendar_after_minutes=0,
+        require_quote_coverage=require_quote_coverage)
     data = dataset.to_dict()
     output = evaluation["strategies"][strategy]
     plans, preflight = [], []
@@ -166,7 +167,8 @@ def compare_strategy(dataset, strategy, settings=None, train_bars=600, validatio
               "initial_balance": initial_balance, "latency_seconds": latency_seconds,
               "calendar_before_minutes": calendar_before_minutes,
               "calendar_after_minutes": calendar_after_minutes, "provider": provider,
-              "model": model, "challenger": True, "max_llm_decisions": max_llm_decisions}
+              "model": model, "challenger": True, "max_llm_decisions": max_llm_decisions,
+              "require_quote_coverage": require_quote_coverage}
     config_hash = _hash(config)
 
     provider_calls = 0
@@ -286,5 +288,9 @@ def compare_strategy(dataset, strategy, settings=None, train_bars=600, validatio
             "llm_decisions": usable_advice_count,
             "provider_calls": provider_calls,
             "folds": per_fold, "variants": summaries, "paired_fold_pnl_delta_vs_A": paired,
+            "quote_coverage": {"required": require_quote_coverage,
+                "planned_folds": output.get("planned_folds", 0),
+                "evaluated_folds": output.get("complete_folds", 0),
+                "excluded_folds": output.get("coverage_exclusions", [])},
             "paired_fold_policy": "data_unavailable folds are excluded; folds are never imputed as zero",
             "winner": None}

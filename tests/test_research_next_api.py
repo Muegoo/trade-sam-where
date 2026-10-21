@@ -12,7 +12,7 @@ from tests.test_research_api import payload, wait_job
 
 
 class NumpyH1Broker:
-    def __init__(self, symbol):
+    def __init__(self, symbol, time_offset_seconds=0):
         self.symbol = symbol
 
     def snapshot(self):

@@ -2,6 +2,7 @@ import copy
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
 from fastapi.testclient import TestClient
@@ -157,6 +158,62 @@ class MonitorTests(unittest.TestCase):
         self.assertFalse(self.monitor.step(snap,[self.signal|{'key':'smc'}],DEFAULTS))
         self.assertEqual(len(self.broker.data['positions']),1)
 
+    def test_total_session_limit_does_not_refill_after_positions_close(self):
+        settings=DEFAULTS|{'max_lot':.01}
+        self.monitor.start(self.snap,[self.old],settings,max_trades=5)
+        for key in ['ema','smc','supply','bollinger','asian']:
+            snap=self.broker.snapshot()
+            self.assertTrue(self.monitor.step(snap,[self.signal|{'key':key}],settings))
+            snap=self.broker.snapshot()
+            self.broker.close_position(snap['positions'][0],snap)
+        self.assertFalse(self.monitor.step(self.broker.snapshot(),[self.signal|{'key':'smc'}],settings))
+        self.assertFalse(self.monitor.enabled)
+        self.assertEqual(self.monitor.trades_used,5)
+        self.assertTrue(self.monitor.close_on_expiry)
+        restarted=Monitor(self.store,self.broker)
+        self.assertEqual(restarted.status()['trades_used'],5)
+        self.assertEqual(restarted.status()['max_trades'],5)
+        self.assertFalse(restarted.enabled)
+
+    def test_unknown_send_consumes_slot_but_explicit_rejection_does_not(self):
+        self.monitor.start(self.snap,[self.old],DEFAULTS,max_trades=1)
+        original=self.broker.send
+        def reject(*args):raise BrokerRejected('Rejected before submission')
+        self.broker.send=reject
+        self.assertFalse(self.monitor.step(self.snap,[self.signal],DEFAULTS))
+        self.assertEqual(self.monitor.trades_used,0)
+        def unknown(*args):raise BrokerError('Unknown transport result')
+        self.broker.send=unknown
+        self.assertFalse(self.monitor.step(self.snap,[self.signal|{'key':'smc'}],DEFAULTS))
+        self.assertEqual(self.monitor.trades_used,1)
+        self.assertFalse(self.monitor.enabled)
+        self.assertEqual(Monitor(self.store,self.broker).trades_used,1)
+        self.broker.send=original
+
+    def test_invalid_session_limit_rejected(self):
+        for value in [0,-1,101,True,1.5]:
+            with self.assertRaises(BrokerError):
+                self.monitor.start(self.snap,[self.old],DEFAULTS,max_trades=value)
+
+    def test_unlimited_session_can_open_more_than_five_trades_without_changing_position_cap(self):
+        settings=DEFAULTS|{'max_lot':.01,'max_orders':5}
+        self.monitor.start(self.snap,[self.old],settings,max_trades=None)
+        clock=time.time()
+        for index in range(7):
+            with patch('trade_app.broker.time.time',return_value=clock+index*900):
+                snap=self.broker.snapshot()
+                price=snap['tick']['ask']
+                signal=self.signal|{'time':snap['bars'][-2]['time'],'entry':price,
+                                    'sl':round(price-5,2),'tp':round(price+10,2)}
+                self.assertTrue(self.monitor.step(snap,[signal],settings),self.monitor.message)
+                after=self.broker.snapshot()
+                self.broker.close_position(after['positions'][0],after)
+        self.assertEqual(self.monitor.trades_used,7)
+        self.assertIsNone(self.monitor.max_trades)
+        self.assertTrue(self.monitor.enabled)
+        self.assertEqual(self.monitor.max_positions,5)
+
+
     def make_expired_position(self):
         self.start()
         self.assertTrue(self.monitor.step(self.snap,[self.signal],DEFAULTS))
@@ -264,6 +321,15 @@ class CloseAPITests(unittest.TestCase):
         self.client.post('/api/kill',json={'active':True},headers=self.headers)
         self.assertFalse(self.client.get('/api/state').json()['monitor']['enabled'])
         self.assertEqual(len(self.app.state.broker.data['positions']),1)
+
+    def test_monitor_api_accepts_total_limit_and_rejects_invalid_limit(self):
+        for value in [0,101,True,1.5]:
+            result=self.client.post('/api/monitor/start',json={'scope':self.state['scope'],'max_trades':value},headers=self.headers)
+            self.assertEqual(result.status_code,422,result.text)
+        result=self.client.post('/api/monitor/start',json={'scope':self.state['scope'],'max_trades':5},headers=self.headers)
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.json()['max_trades'],5)
+        self.assertEqual(result.json()['trades_used'],0)
 
 
 class MT5CloseTests(unittest.TestCase):
