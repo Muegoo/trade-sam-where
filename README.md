@@ -93,5 +93,6 @@ The server is intended for **local use**. It binds to loopback and uses local-ho
 - [Original Thai walkthrough, updated to the new name](README.th.md)
 - [Architecture and verification notes](docs/portfolio.md)
 - [Offline research CLI](docs/research.md)
+- [SaaS roadmap and development handoff (Thai)](docs/saas-roadmap.md)
 
 Screenshots in this repository are from the paper demo. Local databases, CSV exports, credentials and runtime logs are excluded. No project-wide license has been selected yet.
